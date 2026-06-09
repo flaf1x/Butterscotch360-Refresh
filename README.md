@@ -1,5 +1,32 @@
 <h1 align="center">🥧 Butterscotch 🥧</h1>
 
+## Butterscotch360-Refresh
+
+This repository is an experimental refresh of the Xbox 360 port of
+[Butterscotch](https://github.com/ButterscotchRunner/Butterscotch), an open source
+GameMaker: Studio runner reimplementation. The goal of this fork is to bring the
+old Xbox 360 port closer to the current Butterscotch codebase while keeping it
+usable on real Xbox 360 hardware.
+
+It is not the same thing as the original
+[ceilingtilefan/Butterscotch-360](https://github.com/ceilingtilefan/Butterscotch-360)
+fork. That project was the first Xbox 360 port and targeted an older snapshot of
+Butterscotch. This refresh rebases the idea onto a much newer upstream, adds a
+Visual Studio 2010 / Xbox 360 XDK project, a D3D9 renderer, an XAudio2 backend,
+diagnostic logging, startup splash/progress rendering, and a bunch of Undertale
+compatibility fixes found while testing on hardware.
+
+Also, yes, this is double vibe-coded in the funniest possible way: the original
+Butterscotch-360 port was reportedly brought up with Claude Code, and this
+refresh was revived and debugged with ChatGPT Codex. The intent is still very
+practical: keep the source available so anyone with the Xbox 360 SDK setup can
+build, inspect, improve, and preserve the port instead of depending on one lost
+binary.
+
+The current test setup expects `data.win`, external Undertale audio files, and
+optionally `splash.png` next to the `.xex` on the console. The output binary used
+during testing is named `Butterscotch360-Refresh.xex`.
+
 <!-- Badges, about the GitHub repository itself -->
 <p align="center">
 <a href="https://github.com/ButterscotchRunner/CompatibilityList"><img src="https://img.shields.io/badge/butterscotch-compatibility_list-green"></a>
