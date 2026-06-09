@@ -16,12 +16,9 @@ Visual Studio 2010 / Xbox 360 XDK project, a D3D9 renderer, an XAudio2 backend,
 diagnostic logging, startup splash/progress rendering, and a bunch of Undertale
 compatibility fixes found while testing on hardware.
 
-Also, yes, this is double vibe-coded in the funniest possible way: the original
-Butterscotch-360 port was reportedly brought up with Claude Code, and this
-refresh was revived and debugged with ChatGPT Codex. The intent is still very
-practical: keep the source available so anyone with the Xbox 360 SDK setup can
-build, inspect, improve, and preserve the port instead of depending on one lost
-binary.
+Well, yeah, it’s a double vibe code, lol.
+The original project was ported using Claude Code, and I, in turn, updated the codebase using ChatGPT Codex.
+You can throw tomatoes at me all you want, but that’s how it is.
 
 The current test setup expects `data.win`, external Undertale audio files, and
 optionally `splash.png` next to the `.xex` on the console. The output binary used
