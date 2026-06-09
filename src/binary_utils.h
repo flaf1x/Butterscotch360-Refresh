@@ -60,7 +60,7 @@ static inline uint64_t BinaryUtils_bswap64(uint64_t value) {
 #endif
 
 static inline uint16_t BinaryUtils_toLittle16(uint16_t value) {
-#if defined(IS_BIG_ENDIAN)
+#if defined(IS_BIG_ENDIAN) || defined(_XBOX)
     return BinaryUtils_bswap16(value);
 #else
     return value;
@@ -68,7 +68,7 @@ static inline uint16_t BinaryUtils_toLittle16(uint16_t value) {
 }
 
 static inline uint32_t BinaryUtils_toLittle32(uint32_t value) {
-#if defined(IS_BIG_ENDIAN)
+#if defined(IS_BIG_ENDIAN) || defined(_XBOX)
     return BinaryUtils_bswap32(value);
 #else
     return value;
@@ -76,7 +76,7 @@ static inline uint32_t BinaryUtils_toLittle32(uint32_t value) {
 }
 
 static inline uint64_t BinaryUtils_toLittle64(uint64_t value) {
-#if defined(IS_BIG_ENDIAN)
+#if defined(IS_BIG_ENDIAN) || defined(_XBOX)
     return BinaryUtils_bswap64(value);
 #else
     return value;

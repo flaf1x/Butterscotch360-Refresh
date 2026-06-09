@@ -898,7 +898,22 @@ RValue VMBuiltins_getVariable(VMContext* ctx, int16_t builtinVarId, const char* 
             }
             return RValue_makeUndefined();
         }
-        case BUILTIN_VAR_ARGUMENT0 ... BUILTIN_VAR_ARGUMENT15: {
+        case BUILTIN_VAR_ARGUMENT0:
+        case BUILTIN_VAR_ARGUMENT1:
+        case BUILTIN_VAR_ARGUMENT2:
+        case BUILTIN_VAR_ARGUMENT3:
+        case BUILTIN_VAR_ARGUMENT4:
+        case BUILTIN_VAR_ARGUMENT5:
+        case BUILTIN_VAR_ARGUMENT6:
+        case BUILTIN_VAR_ARGUMENT7:
+        case BUILTIN_VAR_ARGUMENT8:
+        case BUILTIN_VAR_ARGUMENT9:
+        case BUILTIN_VAR_ARGUMENT10:
+        case BUILTIN_VAR_ARGUMENT11:
+        case BUILTIN_VAR_ARGUMENT12:
+        case BUILTIN_VAR_ARGUMENT13:
+        case BUILTIN_VAR_ARGUMENT14:
+        case BUILTIN_VAR_ARGUMENT15: {
             int argNumber = builtinVarId - BUILTIN_VAR_ARGUMENT0;
             if (ctx->scriptArgs != nullptr && ctx->scriptArgCount > argNumber) {
                 RValue val = ctx->scriptArgs[argNumber];
@@ -1503,8 +1518,58 @@ void VMBuiltins_setVariable(VMContext* ctx, int16_t builtinVarId, const char* na
             return;
 
         // Read-only variables (silently ignore with warning)
-        case BUILTIN_VAR_OS_TYPE ... BUILTIN_VAR_OS_LLVM_WINPHONE:
-        case BUILTIN_VAR_BUFFER_FIXED ... BUILTIN_VAR_BUFFER_SEEK_END:
+        case BUILTIN_VAR_OS_TYPE:
+        case BUILTIN_VAR_OS_UNKNOWN:
+        case BUILTIN_VAR_OS_WIN32:
+        case BUILTIN_VAR_OS_WINDOWS:
+        case BUILTIN_VAR_OS_MACOSX:
+        case BUILTIN_VAR_OS_PSP:
+        case BUILTIN_VAR_OS_IOS:
+        case BUILTIN_VAR_OS_ANDROID:
+        case BUILTIN_VAR_OS_SYMBIAN:
+        case BUILTIN_VAR_OS_LINUX:
+        case BUILTIN_VAR_OS_WINPHONE:
+        case BUILTIN_VAR_OS_TIZEN:
+        case BUILTIN_VAR_OS_WIN8NATIVE:
+        case BUILTIN_VAR_OS_WIIU:
+        case BUILTIN_VAR_OS_3DS:
+        case BUILTIN_VAR_OS_PSVITA:
+        case BUILTIN_VAR_OS_BB10:
+        case BUILTIN_VAR_OS_PS4:
+        case BUILTIN_VAR_OS_XBOXONE:
+        case BUILTIN_VAR_OS_PS3:
+        case BUILTIN_VAR_OS_XBOX360:
+        case BUILTIN_VAR_OS_UWP:
+        case BUILTIN_VAR_OS_AMAZON:
+        case BUILTIN_VAR_OS_SWITCH:
+        case BUILTIN_VAR_OS_LLVM_WIN32:
+        case BUILTIN_VAR_OS_LLVM_MACOSX:
+        case BUILTIN_VAR_OS_LLVM_PSP:
+        case BUILTIN_VAR_OS_LLVM_IOS:
+        case BUILTIN_VAR_OS_LLVM_ANDROID:
+        case BUILTIN_VAR_OS_LLVM_SYMBIAN:
+        case BUILTIN_VAR_OS_LLVM_LINUX:
+        case BUILTIN_VAR_OS_LLVM_WINPHONE:
+        case BUILTIN_VAR_BUFFER_FIXED:
+        case BUILTIN_VAR_BUFFER_GROW:
+        case BUILTIN_VAR_BUFFER_WRAP:
+        case BUILTIN_VAR_BUFFER_FAST:
+        case BUILTIN_VAR_BUFFER_U8:
+        case BUILTIN_VAR_BUFFER_S8:
+        case BUILTIN_VAR_BUFFER_U16:
+        case BUILTIN_VAR_BUFFER_S16:
+        case BUILTIN_VAR_BUFFER_U32:
+        case BUILTIN_VAR_BUFFER_S32:
+        case BUILTIN_VAR_BUFFER_U64:
+        case BUILTIN_VAR_BUFFER_F16:
+        case BUILTIN_VAR_BUFFER_F32:
+        case BUILTIN_VAR_BUFFER_F64:
+        case BUILTIN_VAR_BUFFER_BOOL:
+        case BUILTIN_VAR_BUFFER_STRING:
+        case BUILTIN_VAR_BUFFER_TEXT:
+        case BUILTIN_VAR_BUFFER_SEEK_START:
+        case BUILTIN_VAR_BUFFER_SEEK_RELATIVE:
+        case BUILTIN_VAR_BUFFER_SEEK_END:
         case BUILTIN_VAR_ID:
         case BUILTIN_VAR_OBJECT_INDEX:
         case BUILTIN_VAR_CURRENT_DAY:
@@ -1520,7 +1585,27 @@ void VMBuiltins_setVariable(VMContext* ctx, int16_t builtinVarId, const char* na
         case BUILTIN_VAR_DEBUG_MODE:
         case BUILTIN_VAR_ROOM_FIRST:
         case BUILTIN_VAR_ROOM_LAST:
-        case BUILTIN_VAR_GP_FACE1 ... BUILTIN_VAR_GP_AXIS_RV:
+        case BUILTIN_VAR_GP_FACE1:
+        case BUILTIN_VAR_GP_FACE2:
+        case BUILTIN_VAR_GP_FACE3:
+        case BUILTIN_VAR_GP_FACE4:
+        case BUILTIN_VAR_GP_SHOULDERL:
+        case BUILTIN_VAR_GP_SHOULDERR:
+        case BUILTIN_VAR_GP_SHOULDERLB:
+        case BUILTIN_VAR_GP_SHOULDERRB:
+        case BUILTIN_VAR_GP_SELECT:
+        case BUILTIN_VAR_GP_START:
+        case BUILTIN_VAR_GP_STICKL:
+        case BUILTIN_VAR_GP_STICKR:
+        case BUILTIN_VAR_GP_PADU:
+        case BUILTIN_VAR_GP_PADD:
+        case BUILTIN_VAR_GP_PADL:
+        case BUILTIN_VAR_GP_PADR:
+        case BUILTIN_VAR_GP_HOME:
+        case BUILTIN_VAR_GP_AXIS_LH:
+        case BUILTIN_VAR_GP_AXIS_LV:
+        case BUILTIN_VAR_GP_AXIS_RH:
+        case BUILTIN_VAR_GP_AXIS_RV:
             fprintf(stderr, "VM: [%s] Attempted write to read-only built-in '%s'\n", ctx->currentCodeName, name);
             return;
 
@@ -1533,7 +1618,22 @@ void VMBuiltins_setVariable(VMContext* ctx, int16_t builtinVarId, const char* na
             return;
 
         // Argument variables (argument0..argument15)
-        case BUILTIN_VAR_ARGUMENT0 ... BUILTIN_VAR_ARGUMENT15: {
+        case BUILTIN_VAR_ARGUMENT0:
+        case BUILTIN_VAR_ARGUMENT1:
+        case BUILTIN_VAR_ARGUMENT2:
+        case BUILTIN_VAR_ARGUMENT3:
+        case BUILTIN_VAR_ARGUMENT4:
+        case BUILTIN_VAR_ARGUMENT5:
+        case BUILTIN_VAR_ARGUMENT6:
+        case BUILTIN_VAR_ARGUMENT7:
+        case BUILTIN_VAR_ARGUMENT8:
+        case BUILTIN_VAR_ARGUMENT9:
+        case BUILTIN_VAR_ARGUMENT10:
+        case BUILTIN_VAR_ARGUMENT11:
+        case BUILTIN_VAR_ARGUMENT12:
+        case BUILTIN_VAR_ARGUMENT13:
+        case BUILTIN_VAR_ARGUMENT14:
+        case BUILTIN_VAR_ARGUMENT15: {
             int argNumber = builtinVarId - BUILTIN_VAR_ARGUMENT0;
             if (ctx->scriptArgs != nullptr && ctx->scriptArgCount > argNumber) {
                 RValue_free(&ctx->scriptArgs[argNumber]);
@@ -1594,7 +1694,7 @@ static RValue builtin_string_length(MAYBE_UNUSED VMContext* ctx, RValue* args, i
 
 // https://docs.vultr.com/clang/examples/remove-all-characters-in-a-string-except-alphabets
 void filterAlphabets(char *str) {
-    char result[strlen(str) + 1];
+    char* result = (char*) alloca(strlen(str) + 1);
     int j = 0;
     for (int i = 0; str[i] != '\0'; i++) {
         if ((str[i] >= 'a' && str[i] <= 'z') || (str[i] >= 'A' && str[i] <= 'Z')) {
@@ -2503,7 +2603,7 @@ static bool rvalueIsMatrix(RValue rv) {
     if (rv.type != RVALUE_ARRAY) return false;
     if (GMLArray_length1D(rv.array) != 16) return false;
     repeat (16, i) {
-        RValueType type = GMLArray_slot(rv.array, i)->type;
+        RValueType type = (RValueType) GMLArray_slot(rv.array, i)->type;
         if (type != RVALUE_REAL && type != RVALUE_INT32 && type != RVALUE_INT64)
             return false;
     }
@@ -5787,7 +5887,8 @@ static RValue builtin_file_text_close(VMContext* ctx, RValue* args, int32_t argC
     free(file->content);
     free(file->writeBuffer);
     free(file->filePath);
-    *file = (OpenTextFile) {0};
+    OpenTextFile empty = {0};
+    *file = empty;
     return RValue_makeUndefined();
 }
 
@@ -6085,7 +6186,8 @@ static RValue builtin_file_bin_close(VMContext* ctx, RValue* args, int32_t argCo
     OpenBinaryFile* file = getBinaryFile(runner, RValue_toInt32(args[0]));
     if (file == nullptr) return RValue_makeUndefined();
     runner->fileSystem->vtable->binaryClose(runner->fileSystem, file->handle);
-    *file = (OpenBinaryFile) {0};
+    OpenBinaryFile empty = {0};
+    *file = empty;
     return RValue_makeUndefined();
 }
 

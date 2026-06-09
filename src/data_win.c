@@ -7,6 +7,19 @@
 #include <string.h>
 #include <math.h>
 
+#ifdef _XBOX
+#ifdef __cplusplus
+extern "C" {
+#endif
+extern void Butterscotch_xdkDataWinTrace(const char* fmt, ...);
+#ifdef __cplusplus
+}
+#endif
+#define DW_TRACE(...) Butterscotch_xdkDataWinTrace(__VA_ARGS__)
+#else
+#define DW_TRACE(...) ((void)0)
+#endif
+
 #include "stb_ds.h"
 #include "utils.h"
 
@@ -839,7 +852,7 @@ static void parseBGND(BinaryReader* reader, DataWin* dw) {
             bg->gms2ExportedSpriteIndex = BinaryReader_readInt32(reader);
             bg->gms2FrameLength = BinaryReader_readInt64(reader);
             int tileIdCount = bg->gms2TileCount * bg->gms2ItemsPerTileCount;
-            bg->gms2TileIds = malloc(tileIdCount*sizeof(uint32_t));
+            bg->gms2TileIds = (uint32_t*) malloc(tileIdCount*sizeof(uint32_t));
             repeat(tileIdCount, j) {
                 bg->gms2TileIds[j] = BinaryReader_readUint32(reader);
             }
@@ -2374,22 +2387,28 @@ static void parseAUDO(BinaryReader* reader, DataWin* dw) {
 // ===[ MAIN PARSE FUNCTION ]===
 
 DataWin* DataWin_parse(const char* filePath, DataWinParserOptions options) {
+    DW_TRACE("enter filePath=%s loadType=%d lazyRooms=%d", filePath, (int) options.loadType, (int) options.lazyLoadRooms);
     FILE* file = fopen(filePath, "rb");
     if (!file) {
+        DW_TRACE("fopen failed");
         fprintf(stderr, "Failed to open file: %s\n", filePath);
         exit(1);
     }
+    DW_TRACE("fopen OK");
 
     // Use a large read buffer to reduce the number of physical reads
     // This is critical for slow I/O devices like the PS2 CDVD drive, where each fread
     // call would otherwise trigger a separate disc read of just a few sectors
     setvbuf(file, nullptr, _IOFBF, 128 * 1024);
+    DW_TRACE("setvbuf OK");
 
     fseek(file, 0, SEEK_END);
     size_t fileSize = ftell(file);
     fseek(file, 0, SEEK_SET);
+    DW_TRACE("fileSize=%u", (unsigned int) fileSize);
 
     if (fileSize <= 0) {
+        DW_TRACE("invalid file size");
         fprintf(stderr, "Invalid file size: %ld\n", fileSize);
         fclose(file);
         exit(1);
@@ -2397,22 +2416,28 @@ DataWin* DataWin_parse(const char* filePath, DataWinParserOptions options) {
 
     // Allocate and zero-initialize DataWin
     DataWin* dw = safeCalloc(1, sizeof(DataWin));
+    DW_TRACE("DataWin alloc OK size=%u", (unsigned int) sizeof(DataWin));
 
     BinaryReader reader = BinaryReader_create(file, (size_t) fileSize);
+    DW_TRACE("BinaryReader created");
 
     // Some WAD files, such as ones made with https://github.com/AlexWaveDiver/TranslaTale (I think?) have pointers inside a chunk pointing to data in OTHER chunks
     // The original runner doesn't care because it loads the entire file in memory up front, so we do the same if asked
     // (we don't do that by default because some low end platforms would NOT be able to handle it)
     uint8_t* wholeFileData = nullptr;
     if (options.loadType == DATAWINLOADTYPE_LOAD_IN_MEMORY_AHEAD_OF_TIME) {
+        DW_TRACE("whole-file load allocating %u bytes", (unsigned int) fileSize);
         wholeFileData = safeMalloc((size_t) fileSize);
-        fread(wholeFileData, 1, (size_t) fileSize, file);
+        size_t wholeRead = fread(wholeFileData, 1, (size_t) fileSize, file);
+        DW_TRACE("whole-file read got %u/%u", (unsigned int) wholeRead, (unsigned int) fileSize);
         BinaryReader_setBuffer(&reader, wholeFileData, 0, (size_t) fileSize);
     }
 
     // Validate FORM header
     char formMagic[4];
+    DW_TRACE("reading FORM magic");
     BinaryReader_readBytes(&reader, formMagic, 4);
+    DW_TRACE("FORM magic %.4s", formMagic);
     // Some games may purposely corrupt the magic value so that UndertaleModTool doesn't open it
     // The native runner does not care about verifying the magic value, so we'll validate it and warn, but we won't exit
     if (memcmp(formMagic, "FORM", 4) != 0) {
@@ -2420,6 +2445,7 @@ DataWin* DataWin_parse(const char* filePath, DataWinParserOptions options) {
     }
 
     uint32_t formLength = BinaryReader_readUint32(&reader);
+    DW_TRACE("formLength=%u", formLength);
     (void) formLength;
 
     // Pass 1: Count total chunks and find STRG chunk offset.
@@ -2428,6 +2454,7 @@ DataWin* DataWin_parse(const char* filePath, DataWinParserOptions options) {
     int totalChunks = 0;
     bool codeExists = false;
     BinaryReader_seek(&reader, 8); // reset to after FORM header
+    DW_TRACE("pass1 begin");
 
     while ((size_t) fileSize > BinaryReader_getPosition(&reader)) {
         if (BinaryReader_getPosition(&reader) + 8 > (size_t) fileSize) break;
@@ -2436,14 +2463,18 @@ DataWin* DataWin_parse(const char* filePath, DataWinParserOptions options) {
         BinaryReader_readBytes(&reader, chunkName, 4);
         uint32_t chunkLength = BinaryReader_readUint32(&reader);
         size_t chunkDataStart = BinaryReader_getPosition(&reader);
+        DW_TRACE("pass1 chunk %d %.4s len=%u start=0x%X", totalChunks + 1, chunkName, chunkLength, (unsigned int) chunkDataStart);
 
         if (options.parseStrg && memcmp(chunkName, "STRG", 4) == 0) {
+            DW_TRACE("pass1 STRG read len=%u start=0x%X", chunkLength, (unsigned int) chunkDataStart);
             dw->strgBufferBase = chunkDataStart;
             dw->strgBuffer = BinaryReader_readBytesAt(&reader, chunkDataStart, chunkLength);
+            DW_TRACE("pass1 STRG OK");
         }
 
         if ((memcmp(chunkName, "CODE", 4) == 0) && chunkLength > 0) {
             codeExists = true;
+            DW_TRACE("pass1 CODE exists len=%u", chunkLength);
         }
 
         // Bump detected version based on chunk presence, so later chunks can use the right version during parsing (parseOBJT needs to know we're >= 2.3 to probe for the GMS 2022.5+ Managed field).
@@ -2460,6 +2491,7 @@ DataWin* DataWin_parse(const char* filePath, DataWinParserOptions options) {
         }
 
         if (chunkDataStart + chunkLength > fileSize) {
+            DW_TRACE("pass1 chunk out of bounds %.4s start=0x%X len=%u fileSize=%u", chunkName, (unsigned int) chunkDataStart, chunkLength, (unsigned int) fileSize);
             fprintf(stderr, "Chunk data extends beyond file size: chunkDataStart=%zu, chunkLength=%u, fileSize=%zu! Are you running a GameMaker Raspberry Pi game? Skipping bytes out of bounds...\n", chunkDataStart, chunkLength, fileSize);
             break;
         }
@@ -2467,8 +2499,10 @@ DataWin* DataWin_parse(const char* filePath, DataWinParserOptions options) {
         BinaryReader_seek(&reader, chunkDataStart + chunkLength);
         totalChunks++;
     }
+    DW_TRACE("pass1 done totalChunks=%d codeExists=%d", totalChunks, (int) codeExists);
 
     if (!codeExists && options.parseCode) {
+        DW_TRACE("CODE missing");
         fprintf(stderr, "CODE chunk does not exist or is empty! This usually means you're loading a YYC game.\n");
         fclose(file);
         exit(1);
@@ -2480,6 +2514,7 @@ DataWin* DataWin_parse(const char* filePath, DataWinParserOptions options) {
     // reads on slow I/O devices like the PS2 CDVD drive.
     BinaryReader_seek(&reader, 8); // skip past FORM header
     int chunkIndex = 0;
+    DW_TRACE("pass2 begin");
     while ((size_t) fileSize > BinaryReader_getPosition(&reader)) {
         if (BinaryReader_getPosition(&reader) + 8 > (size_t) fileSize) break;
 
@@ -2488,6 +2523,7 @@ DataWin* DataWin_parse(const char* filePath, DataWinParserOptions options) {
         uint32_t chunkLength = BinaryReader_readUint32(&reader);
         size_t chunkDataStart = BinaryReader_getPosition(&reader);
         size_t chunkEnd = chunkDataStart + chunkLength;
+        DW_TRACE("pass2 chunk %d/%d %.4s len=%u start=0x%X", chunkIndex + 1, totalChunks, chunkName, chunkLength, (unsigned int) chunkDataStart);
 
         if (options.progressCallback) {
             options.progressCallback(chunkName, chunkIndex, totalChunks, dw, options.progressCallbackUserData);
@@ -2523,8 +2559,10 @@ DataWin* DataWin_parse(const char* filePath, DataWinParserOptions options) {
         // Bulk-read the chunk data into memory for fast parsing
         uint8_t* chunkBuffer = nullptr;
         if (shouldParse && chunkLength > 0 && options.loadType != DATAWINLOADTYPE_LOAD_IN_MEMORY_AHEAD_OF_TIME) {
+            DW_TRACE("pass2 read chunk %.4s len=%u", chunkName, chunkLength);
             chunkBuffer = safeMalloc(chunkLength);
             size_t read = fread(chunkBuffer, 1, chunkLength, reader.file);
+            DW_TRACE("pass2 read chunk %.4s got=%u", chunkName, (unsigned int) read);
             if (read != chunkLength) {
                 fprintf(stderr, "DataWin: short read on chunk %.4s (expected %u, got %zu)\n", chunkName, chunkLength, read);
                 exit(1);
@@ -2534,6 +2572,7 @@ DataWin* DataWin_parse(const char* filePath, DataWinParserOptions options) {
 
         if (options.parseGen8 && memcmp(chunkName, "GEN8", 4) == 0) {
             parseGEN8(&reader, dw);
+            DW_TRACE("pass2 parsed GEN8 wad=%u game=%u.%u.%u.%u", (unsigned int) dw->gen8.wadVersion, (unsigned int) dw->gen8.major, (unsigned int) dw->gen8.minor, (unsigned int) dw->gen8.release, (unsigned int) dw->gen8.build);
         } else if (options.parseOptn && memcmp(chunkName, "OPTN", 4) == 0) {
             parseOPTN(&reader, dw);
         } else if (options.parseLang && memcmp(chunkName, "LANG", 4) == 0) {
@@ -2615,6 +2654,7 @@ DataWin* DataWin_parse(const char* filePath, DataWinParserOptions options) {
         }
         chunkIndex++;
     }
+    DW_TRACE("pass2 done chunkIndex=%d", chunkIndex);
 
     // GMS2: apply default FPS to rooms with speed=0
     if (dw->gen8.gms2FPS > 0) {
@@ -2642,6 +2682,7 @@ DataWin* DataWin_parse(const char* filePath, DataWinParserOptions options) {
         free(wholeFileData);
     }
 
+    DW_TRACE("parse return OK");
     return dw;
 }
 

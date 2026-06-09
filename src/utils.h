@@ -10,6 +10,8 @@
 
 #include "real_type.h"
 
+#ifndef BUTTERSCOTCH_MSVC_COMPAT
+
 #define forEach(type, item, array, count) \
     for (typeof(count) item##_i_ = 0; item##_i_ < (count); item##_i_++) \
     for (type* item = &(array)[item##_i_]; item; item = NULL)
@@ -111,6 +113,8 @@ _val; \
     } \
     _ptr; \
 })
+
+#endif
 
 // Truncates to 6 decimal places, matching the HTML5 runner's ClampFloat
 static inline GMLReal clampFloat(GMLReal f) {

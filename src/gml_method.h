@@ -11,7 +11,11 @@ typedef struct RValue RValue;
 
 #ifndef BUILTINFUNC_DEFINED
 #define BUILTINFUNC_DEFINED
+#ifdef _MSC_VER
+typedef RValue (__cdecl *BuiltinFunc)(VMContext* ctx, RValue* args, int32_t argCount);
+#else
 typedef RValue (*BuiltinFunc)(VMContext* ctx, RValue* args, int32_t argCount);
+#endif
 #endif
 
 // ===[ GMLMethod - Refcounted method binding ]===

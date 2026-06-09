@@ -648,8 +648,9 @@ static void rebuildDrawableCacheIfDirty(Runner* runner) {
         int32_t instanceCount = (int32_t) arrlen(runner->instances);
         repeat(instanceCount, i) {
             Instance* inst = runner->instances[i];
-            Drawable d = {0};
-            d.type = DRAWABLE_INSTANCE;
+            Drawable d;
+            memset(&d, 0, sizeof(d));
+            d.type = (DrawableType) DRAWABLE_INSTANCE;
             d.depth = inst->depth;
             d.instance = inst;
             arrput(runner->cachedDrawables, d);
@@ -658,8 +659,9 @@ static void rebuildDrawableCacheIfDirty(Runner* runner) {
         if (!DataWin_isVersionAtLeast(runner->dataWin, 2, 0, 0, 0)) {
             repeat(room->tileCount, i) {
                 RoomTile* tile = &room->tiles[i];
-                Drawable d = {0};
-                d.type = DRAWABLE_TILE;
+                Drawable d;
+                memset(&d, 0, sizeof(d));
+                d.type = (DrawableType) DRAWABLE_TILE;
                 d.depth = tile->tileDepth;
                 d.tileIndex = (int32_t) i;
                 arrput(runner->cachedDrawables, d);
@@ -668,8 +670,9 @@ static void rebuildDrawableCacheIfDirty(Runner* runner) {
             size_t runtimeLayersCount = arrlenu(runner->runtimeLayers);
             repeat(runtimeLayersCount, i) {
                 RuntimeLayer* runtimeLayer = &runner->runtimeLayers[i];
-                Drawable d = {0};
-                d.type = DRAWABLE_LAYER;
+                Drawable d;
+                memset(&d, 0, sizeof(d));
+                d.type = (DrawableType) DRAWABLE_LAYER;
                 d.depth = runtimeLayer->depth;
                 d.runtimeLayerId = (int32_t) runtimeLayer->id;
                 arrput(runner->cachedDrawables, d);
@@ -1603,7 +1606,8 @@ static void cleanupState(Runner* runner) {
             free(file->content);
             free(file->writeBuffer);
             free(file->filePath);
-            *file = (OpenTextFile) {0};
+            OpenTextFile empty = {0};
+            *file = empty;
         }
     }
 
@@ -1613,7 +1617,8 @@ static void cleanupState(Runner* runner) {
         OpenBinaryFile* file = &runner->openBinaryFiles[i];
         if (file->isOpen) {
             runner->fileSystem->vtable->binaryClose(runner->fileSystem, file->handle);
-            *file = (OpenBinaryFile) {0};
+            OpenBinaryFile empty = {0};
+            *file = empty;
         }
     }
 

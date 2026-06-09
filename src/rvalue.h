@@ -22,7 +22,8 @@ void Instance_structIncRef(struct Instance* inst);
 void Instance_structDecRef(struct Instance* inst);
 uint32_t Instance_getInstanceId(struct Instance* inst);
 
-#include "gml_method.h"
+struct GMLMethod;
+typedef struct GMLMethod GMLMethod;
 
 // ===[ GML Data Types (4-bit type codes) ]===
 #define GML_TYPE_DOUBLE   0x0
@@ -89,6 +90,8 @@ struct RValue {
     uint8_t gmlStackType; // GML data type from the instruction that pushed this value
     uint8_t assetRefType; // For RVALUE_ASSETREF: Indicates the asset type (AssetRefType)
 } __attribute__((aligned(8)));
+
+#include "gml_method.h"
 
 static inline RValue RValue_makeReal(GMLReal val) {
     RValue rv = {0};

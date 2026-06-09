@@ -5,3 +5,10 @@ build_ps3/
 .cache
 CMakeUserPresets.json
 .devcontainer/
+Debug/
+Release/
+build-xbox360-xdk/
+*.exe
+*.ilk
+*.pdb
+*.xex
