@@ -16,7 +16,7 @@ Visual Studio 2010 / Xbox 360 XDK project, a D3D9 renderer, an XAudio2 backend,
 diagnostic logging, startup splash/progress rendering, and a bunch of Undertale
 compatibility fixes found while testing on hardware.
 
-Well, yeah, it’s a double vibe code, lol.
+And, yeah, it’s a double vibecode, lol.
 The original project was ported using Claude Code, and I, in turn, updated the codebase using ChatGPT Codex.
 You can throw tomatoes at me all you want, but that’s how it is.
 
