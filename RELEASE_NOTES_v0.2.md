@@ -1,81 +1,69 @@
 # Butterscotch360-Refresh v0.2
 
-This release is the first hardware-tested refresh where vanilla Undertale and
-NXTale both reach a much more usable state on Xbox 360.
+This release note only lists changes made after the previous public release
+notes. The earlier release already covered the initial refreshed Xbox 360
+project files, D3D9/XAudio2 backend, external OGG playback, diagnostic log,
+startup splash/progress screen, and the first Undertale fixes.
 
 ## Highlights
 
-- Added a startup splash/progress screen while `data.win` is parsed.
-- Added persistent diagnostic logging to `bs360_refresh.log`.
 - Added an on-screen diagnostic overlay toggled with `LB + RB`.
-- Reworked Xbox 360 audio around streamed OGG music playback.
-- Added real `application_surface` support to the D3D9 backend.
-- Improved crisp pixel output with point sampling and 720p presentation.
-- Added lazy texture-page loading to reduce memory pressure.
-- Fixed NXTale texture-page parsing when stale WAD metadata is present.
-- Fixed NXTale console-style border rendering.
-- Fixed NXTale missing sprites and Undyne spear rotation.
-- Fixed duplicated movement by keeping the GameMaker gamepad API disabled by default.
+- Added runtime memory information to the diagnostic overlay.
+- Added room transition diagnostics to help catch one-frame rendering issues.
+- Added real Xbox 360 D3D9 `application_surface` support.
+- Added lazy texture-page loading to reduce Xbox 360 memory pressure.
+- Added safer texture-page parsing for games with stale WAD metadata.
+- Added NXTale compatibility detection without changing the default `os_type`
+  away from Windows.
+- Fixed NXTale missing sprites caused by texture metadata/stride mismatch.
+- Fixed NXTale console button icons.
+- Fixed NXTale console-style/dynamic border rendering.
+- Fixed NXTale Undyne spear rotation.
+- Fixed duplicated controller movement by keeping the GameMaker gamepad API
+  disabled by default unless explicitly enabled.
+- Reduced visible border flicker during room transitions.
 
-## Xbox 360 Diagnostics
+## Diagnostic Overlay
 
-The in-game overlay now shows:
-
-- FPS and frame timing.
-- Current room index and room name.
-- Instance count and pending room state.
-- Application surface and GUI sizing.
-- Controller connection and speed-up state.
-- Physical and virtual memory usage.
-- Room transition hold counter for border flicker debugging.
-
-The overlay can be toggled at runtime with:
+Press:
 
 ```text
 LB + RB
 ```
 
-## Undertale
+The overlay currently shows:
 
-Vanilla Undertale v1.08 is playable in the tested areas with working text,
-music, sound effects, room transitions, and stable pixel output.
+- FPS and frame timing.
+- Current room index and room name.
+- Room size, instance count, and pending room state.
+- Application surface and GUI dimensions.
+- Controller connection and speed-up state.
+- Physical and virtual memory usage.
+- Room transition hold counter.
 
 ## NXTale
 
-NXTale now reaches in-game scenes with:
+NXTale is now substantially more usable on Xbox 360:
 
-- Working sprites and character rendering.
-- Working console button icons.
-- Working dynamic/custom borders.
-- Correct spear rotation.
-- Less visible border flicker during room transitions.
+- Characters and important sprites render correctly.
+- Console button prompts render.
+- Dynamic/custom borders render in the expected console-style layout.
+- Undyne spear attacks point correctly.
+- The game keeps `os_type` as Windows by default, matching the tested behavior.
 
-## Known Notes
+## Notes
 
-- The port is still experimental and may need per-game fixes for other
-  GameMaker: Studio titles.
-- `os_type` is intentionally kept as Windows by default because that matches the
-  tested Undertale/NXTale behavior.
-- External audio files should be placed next to the `.xex` and `data.win`.
-- Xbox 360 memory limits still matter, especially for games with large texture
-  pages or many streamed assets.
+- Vanilla Undertale v1.08 remains the primary tested baseline.
+- NXTale is tested, but still experimental.
+- External audio files should still be placed next to the `.xex` and `data.win`.
+- `splash.png` remains optional and works the same way as in the previous
+  release.
+- Xbox 360 memory limits still matter, especially for larger texture pages or
+  games with many streamed assets.
 
-## Build
+## Known Issues
 
-The tested build target is:
-
-```text
-Release | Xbox 360
-```
-
-The produced binary is:
-
-```text
-Release/Butterscotch.xex
-```
-
-For testing and releases it is usually renamed to:
-
-```text
-Butterscotch360-Refresh.xex
-```
+- The port is still not generally optimized for 4:3.
+- Other GameMaker: Studio games may need per-game compatibility fixes.
+- If you hit a crash or rendering/audio issue, please attach
+  `bs360_refresh.log` and a screenshot if possible.
