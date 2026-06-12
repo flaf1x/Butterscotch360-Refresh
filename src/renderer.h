@@ -46,6 +46,12 @@
 // Also used as the initial value of Runner.applicationSurfaceId before the first ensure call.
 #define APPLICATION_SURFACE_ID (-1)
 
+#define RENDER_PHASE_NONE 0
+#define RENDER_PHASE_PRE 1
+#define RENDER_PHASE_WORLD 2
+#define RENDER_PHASE_POST 3
+#define RENDER_PHASE_GUI 4
+
 // Nine-slice tile mode constants
 #define NS_STRETCH    0
 #define NS_REPEAT     1
@@ -159,6 +165,7 @@ struct Renderer {
     Runner* runner;
     Matrix4f gmlMatrices[MATRICES_MAX];
     int32_t currentShader;
+    int32_t drawPhase;
 };
 
 // ===[ Shared Helpers (platform-agnostic) ]===

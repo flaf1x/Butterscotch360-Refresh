@@ -29,6 +29,9 @@ typedef struct {
     void** textures;     // IDirect3DTexture9*[]
     int32_t* textureWidths;
     int32_t* textureHeights;
+    uint32_t* textureLastUsedFrame;
+    uint32_t frameCounter;
+    uint32_t loadedTexturePages;
     uint32_t textureCount;
 
     // 1x1 white texture for primitives
@@ -42,6 +45,18 @@ typedef struct {
     // Frame dimensions
     int32_t gameW, gameH;
     int32_t screenW, screenH;
+    bool renderingToApplicationSurface;
+
+    // Backing render target for GameMaker's application_surface.
+    // Other dynamic surfaces are still unsupported on this backend.
+    void* appSurfaceTexture; // IDirect3DTexture9* resolved sample texture
+    void* appRenderTexture;  // reserved for future surface-backed textures
+    void* appSurfaceLevel;   // IDirect3DSurface9* render target
+    int32_t appSurfaceW;
+    int32_t appSurfaceH;
+    int32_t appSurfaceAllocW;
+    int32_t appSurfaceAllocH;
+    bool appSurfaceResolved;
 
     // Letterbox: uniform-scaled render area within screen
     float renderScale;   // uniform scale factor

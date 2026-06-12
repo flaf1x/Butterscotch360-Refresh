@@ -23,9 +23,34 @@
 #include "rvalue.h"
 #include "stb_ds.h"
 #include "text_utils.h"
+
+#ifdef _XBOX
+#ifdef __cplusplus
+extern "C" {
+#endif
+extern void Butterscotch_xdkDiagTrace(const char* fmt, ...);
+#ifdef __cplusplus
+}
+#endif
+#define XDK_SURFACE_TRACE(...) Butterscotch_xdkDiagTrace(__VA_ARGS__)
+#else
+#define XDK_SURFACE_TRACE(...) ((void)0)
+#endif
 #include "collision.h"
 #include "ini.h"
 #include "audio_system.h"
+
+#ifdef _XBOX
+static const char* xdkTraceRoomName(VMContext* ctx) {
+    if (ctx == NULL || ctx->runner == NULL || ctx->runner->currentRoom == NULL) return "(none)";
+    return ctx->runner->currentRoom->name ? ctx->runner->currentRoom->name : "(null)";
+}
+
+static int32_t xdkTraceRoomIndex(VMContext* ctx) {
+    if (ctx == NULL || ctx->runner == NULL) return -1;
+    return ctx->runner->currentRoomIndex;
+}
+#endif
 #include "file_system.h"
 #include "md5.h"
 #include "sha1.h"
@@ -5419,6 +5444,7 @@ static RValue builtin_application_surface_enable(VMContext* ctx, RValue* args, M
     if (runner == nullptr || argCount < 1) return RValue_makeUndefined();
 
     bool enable = RValue_toBool(args[0]);
+    XDK_SURFACE_TRACE("GML: application_surface_enable(%d)", enable ? 1 : 0);
     if (runner->appSurfaceEnabled) {
         runner->oldApplicationWidth = runner->applicationWidth;
         runner->oldApplicationHeight = runner->applicationHeight;
@@ -5451,6 +5477,7 @@ static RValue builtin_application_surface_draw_enable(VMContext* ctx, RValue* ar
     Runner* runner = ctx->runner;
     if (runner == nullptr || argCount < 1) return RValue_makeUndefined();
     runner->appSurfaceAutoDraw = RValue_toBool(args[0]);
+    XDK_SURFACE_TRACE("GML: application_surface_draw_enable(%d)", runner->appSurfaceAutoDraw ? 1 : 0);
     return RValue_makeUndefined();
 }
 
@@ -8236,6 +8263,17 @@ static RValue builtin_draw_sprite_general(VMContext* ctx, RValue* args, MAYBE_UN
     uint32_t c1 = (uint32_t) RValue_toInt32(args[11]);
     float alpha = (float) RValue_toReal(args[15]);
 
+    if (runner->currentRoomIndex >= 288) {
+        static int generalLog = 0;
+        if (generalLog++ < 160) {
+            XDK_SURFACE_TRACE("GML: draw_sprite_general room=%d sprite=%d sub=%d part=%d,%d %dx%d dst=%.2f,%.2f scale=%.3f,%.3f rot=%.2f color=0x%08X alpha=%.3f",
+                              runner->currentRoomIndex,
+                              spriteIndex, subimg,
+                              left, top, width, height,
+                              x, y, xscale, yscale, rot, c1, alpha);
+        }
+    }
+
     if (0 > subimg && ctx->currentInstance != nullptr) {
         subimg = (int32_t) ctx->currentInstance->imageIndex;
     }
@@ -8898,6 +8936,9 @@ static RValue builtin_surface_create(VMContext* ctx, RValue* args, MAYBE_UNUSED 
     Runner* runner = ctx->runner;
     if (runner->renderer != nullptr) {
         int32_t surfaceId = Renderer_createSurface(runner->renderer, width,height);
+        static int logCount = 0;
+        if (logCount++ < 64) XDK_SURFACE_TRACE("GML: surface_create %dx%d -> %d room=%d %s",
+            width, height, surfaceId, xdkTraceRoomIndex(ctx), xdkTraceRoomName(ctx));
         return RValue_makeReal(surfaceId);
     }
     return RValue_makeReal(0.0);
@@ -8919,17 +8960,27 @@ static RValue builtin_surface_set_target(VMContext* ctx, RValue* args, MAYBE_UNU
     int32_t surfaceId = (int32_t) RValue_toReal(args[0]);
 
     Runner* runner = ctx->runner;
+    static int logCount = 0;
     if (Runner_surfaceSetTarget(runner, surfaceId)) {
+        if (logCount++ < 64) XDK_SURFACE_TRACE("GML: surface_set_target(%d) -> 1 room=%d %s",
+            surfaceId, xdkTraceRoomIndex(ctx), xdkTraceRoomName(ctx));
         return RValue_makeReal(1.0);
     }
+    if (logCount++ < 64) XDK_SURFACE_TRACE("GML: surface_set_target(%d) -> 0 room=%d %s",
+        surfaceId, xdkTraceRoomIndex(ctx), xdkTraceRoomName(ctx));
     return RValue_makeReal(0.0);
 }
 
 static RValue builtin_surface_reset_target(VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UNUSED int32_t argCount) {
     Runner* runner = ctx->runner;
+    static int logCount = 0;
     if (Runner_surfaceResetTarget(runner)) {
+        if (logCount++ < 64) XDK_SURFACE_TRACE("GML: surface_reset_target -> 1 room=%d %s",
+            xdkTraceRoomIndex(ctx), xdkTraceRoomName(ctx));
         return RValue_makeReal(1.0);
     }
+    if (logCount++ < 64) XDK_SURFACE_TRACE("GML: surface_reset_target -> 0 room=%d %s",
+        xdkTraceRoomIndex(ctx), xdkTraceRoomName(ctx));
     return RValue_makeReal(0.0);
 }
 
@@ -8999,6 +9050,9 @@ static RValue builtin_draw_surface(VMContext* ctx, RValue* args, MAYBE_UNUSED in
     int32_t surfaceId = (int32_t) RValue_toReal(args[0]);
     float x = (float) RValue_toReal(args[1]);
     float y = (float) RValue_toReal(args[2]);
+    static int logCount = 0;
+    if (logCount++ < 32) XDK_SURFACE_TRACE("GML: draw_surface id=%d x=%.2f y=%.2f room=%d %s",
+        surfaceId, x, y, xdkTraceRoomIndex(ctx), xdkTraceRoomName(ctx));
     Runner* runner = ctx->runner;
     if (runner->renderer != nullptr) {
         runner->renderer->vtable->drawSurface(runner->renderer, surfaceId, 0, 0, -1, -1, x, y, 1.0, 1.0, 0.0, 0xFFFFFFFF, 1.0);
@@ -9016,6 +9070,10 @@ static RValue builtin_draw_surface_ext(VMContext* ctx, RValue* args, MAYBE_UNUSE
     float rot = (float) RValue_toReal(args[5]);
     uint32_t color = (uint32_t) RValue_toInt32(args[6]);
     float alpha = (float) RValue_toReal(args[7]);
+    static int logCount = 0;
+    if (logCount++ < 32) XDK_SURFACE_TRACE("GML: draw_surface_ext id=%d x=%.2f y=%.2f xs=%.3f ys=%.3f rot=%.2f color=0x%08X alpha=%.3f room=%d %s",
+                                           surfaceId, x, y, xscale, yscale, rot, (unsigned)color, alpha,
+                                           xdkTraceRoomIndex(ctx), xdkTraceRoomName(ctx));
 
 
     Runner* runner = ctx->runner;
@@ -9036,6 +9094,10 @@ static RValue builtin_draw_surface_part(VMContext* ctx, RValue* args, MAYBE_UNUS
 
     float x = (float) RValue_toReal(args[5]);
     float y = (float) RValue_toReal(args[6]);
+    static int logCount = 0;
+    if (logCount++ < 32) XDK_SURFACE_TRACE("GML: draw_surface_part id=%d src=%.1f,%.1f %.1fx%.1f dst=%.2f,%.2f room=%d %s",
+                                           surfaceId, left, top, w, h, x, y,
+                                           xdkTraceRoomIndex(ctx), xdkTraceRoomName(ctx));
     Runner* runner = ctx->runner;
     if (runner->renderer != nullptr) {
 
@@ -9060,6 +9122,10 @@ static RValue builtin_draw_surface_part_ext(VMContext* ctx, RValue* args, MAYBE_
     float yscale = (float) RValue_toReal(args[8]);
     uint32_t color = (uint32_t) RValue_toInt32(args[9]);
     float alpha = (float) RValue_toReal(args[10]);
+    static int logCount = 0;
+    if (logCount++ < 128) XDK_SURFACE_TRACE("GML: draw_surface_part_ext id=%d src=%.1f,%.1f %.1fx%.1f dst=%.2f,%.2f xs=%.3f ys=%.3f color=0x%08X alpha=%.3f room=%d %s",
+                                           surfaceId, left, top, w, h, x, y, xscale, yscale, (unsigned)color, alpha,
+                                           xdkTraceRoomIndex(ctx), xdkTraceRoomName(ctx));
     Runner* runner = ctx->runner;
     if (runner->renderer != nullptr) {
 
@@ -9075,6 +9141,10 @@ static RValue builtin_draw_surface_stretched(VMContext* ctx, RValue* args, MAYBE
     float y = (float) RValue_toReal(args[2]);
     float width = (float) RValue_toReal(args[3]);
     float height = (float) RValue_toReal(args[4]);
+    static int logCount = 0;
+    if (logCount++ < 128) XDK_SURFACE_TRACE("GML: draw_surface_stretched id=%d dst=%.2f,%.2f %.2fx%.2f room=%d %s",
+                                           surfaceId, x, y, width, height,
+                                           xdkTraceRoomIndex(ctx), xdkTraceRoomName(ctx));
     Runner* runner = ctx->runner;
     if (runner->renderer != nullptr) {
         float surfW = Renderer_getSurfaceWidth(runner->renderer, surfaceId);
@@ -9206,6 +9276,10 @@ static RValue builtin_sprite_create_from_surface(VMContext* ctx, RValue* args, M
     int32_t yorig = RValue_toInt32(args[8]);
 
     int32_t result = runner->renderer->vtable->createSpriteFromSurface(runner->renderer, surfaceId, x, y, w, h, removeback, smooth, xorig, yorig);
+    static int logCount = 0;
+    if (logCount++ < 64) XDK_SURFACE_TRACE("GML: sprite_create_from_surface surface=%d rect=%d,%d %dx%d removeback=%d smooth=%d origin=%d,%d -> %d room=%d %s",
+        surfaceId, x, y, w, h, removeback ? 1 : 0, smooth ? 1 : 0, xorig, yorig, result,
+        xdkTraceRoomIndex(ctx), xdkTraceRoomName(ctx));
     return RValue_makeReal((GMLReal) result);
 }
 
@@ -9420,12 +9494,35 @@ static RValue builtin_color_get_value(MAYBE_UNUSED VMContext* ctx, RValue* args,
     return RValue_makeReal(v);
 }
 
-// Display stubs
-STUB_RETURN_VALUE(display_get_width, 640.0)
-STUB_RETURN_VALUE(display_get_height, 480.0)
+// Display dimensions. On fixed-output platforms this is the physical backbuffer;
+// falling back to the GEN8 default keeps desktop-less builds deterministic.
+static RValue builtin_display_get_width(VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UNUSED int32_t argCount) {
+    Runner* runner = ctx != nullptr ? ctx->runner : nullptr;
+    if (runner != nullptr && runner->getWindowSize != nullptr) {
+        int32_t w = 0;
+        int32_t h = 0;
+        if (runner->getWindowSize(&w, &h) && w > 0) return RValue_makeReal((GMLReal)w);
+    }
+    return RValue_makeReal((GMLReal)ctx->dataWin->gen8.defaultWindowWidth);
+}
+
+static RValue builtin_display_get_height(VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UNUSED int32_t argCount) {
+    Runner* runner = ctx != nullptr ? ctx->runner : nullptr;
+    if (runner != nullptr && runner->getWindowSize != nullptr) {
+        int32_t w = 0;
+        int32_t h = 0;
+        if (runner->getWindowSize(&w, &h) && h > 0) return RValue_makeReal((GMLReal)h);
+    }
+    return RValue_makeReal((GMLReal)ctx->dataWin->gen8.defaultWindowHeight);
+}
 
 static int32_t resolveGuiWidth(Runner* runner) {
     if (runner->guiWidth > 0) return runner->guiWidth;
+    if (runner->appSurfaceKeepWindowSize && runner->getWindowSize != nullptr) {
+        int32_t w = 0;
+        int32_t h = 0;
+        if (runner->getWindowSize(&w, &h) && w > 0) return w;
+    }
     Room* room = runner->currentRoom;
     if (room != nullptr) {
         repeat(8, vi) {
@@ -9440,6 +9537,11 @@ static int32_t resolveGuiWidth(Runner* runner) {
 
 static int32_t resolveGuiHeight(Runner* runner) {
     if (runner->guiHeight > 0) return runner->guiHeight;
+    if (runner->appSurfaceKeepWindowSize && runner->getWindowSize != nullptr) {
+        int32_t w = 0;
+        int32_t h = 0;
+        if (runner->getWindowSize(&w, &h) && h > 0) return h;
+    }
     Room* room = runner->currentRoom;
     if (room != nullptr) {
         repeat(8, vi) {
@@ -9511,6 +9613,7 @@ static RValue builtin_display_set_gui_size(VMContext* ctx, RValue* args, int32_t
     int32_t h = RValue_toInt32(args[1]);
     runner->guiWidth = w > 0 ? w : 0;
     runner->guiHeight = h > 0 ? h : 0;
+    XDK_SURFACE_TRACE("GML: display_set_gui_size(%d,%d) room=%d %s", w, h, xdkTraceRoomIndex(ctx), xdkTraceRoomName(ctx));
     return RValue_makeUndefined();
 }
 
@@ -9519,6 +9622,7 @@ static RValue builtin_display_set_gui_maximise(VMContext* ctx, MAYBE_UNUSED RVal
     Runner* runner = ctx->runner;
     runner->guiWidth = 0;
     runner->guiHeight = 0;
+    XDK_SURFACE_TRACE("GML: display_set_gui_maximise room=%d %s", xdkTraceRoomIndex(ctx), xdkTraceRoomName(ctx));
     return RValue_makeUndefined();
 }
 

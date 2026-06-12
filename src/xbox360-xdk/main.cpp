@@ -41,6 +41,18 @@ double _xdk_monotonic_ms(void) {
 #define SCREEN_WIDTH  1280
 #define SCREEN_HEIGHT 720
 
+static void diagLog(const char* fmt, ...);
+
+static bool xdkGetWindowSize(int32_t* outW, int32_t* outH) {
+    if (outW) *outW = SCREEN_WIDTH;
+    if (outH) *outH = SCREEN_HEIGHT;
+    return true;
+}
+
+static void xdkSetWindowSize(int32_t width, int32_t height) {
+    diagLog("BS: window_set_size ignored on fixed 720p backbuffer requested=%dx%d", width, height);
+}
+
 static HANDLE gDiagLog = INVALID_HANDLE_VALUE;
 static FILE* gDiagFile = NULL;
 static bool gDiagTriedFallback = false;
@@ -69,6 +81,23 @@ typedef struct LoadingScreen {
 } LoadingScreen;
 
 static LoadingScreen gLoadingScreen;
+static LoadingScreen gDiagOverlayScreen;
+
+static bool gDiagOverlayVisible = false;
+static bool gDiagOverlayComboWasDown = false;
+static float gDiagOverlayFps = 0.0f;
+static float gDiagOverlayDtMs = 0.0f;
+static int gDiagOverlaySteps = 0;
+static uint32_t gDiagOverlayFrameCount = 0;
+static double gDiagOverlayWindowStart = 0.0;
+static SIZE_T gDiagTotalPhys = 0;
+static SIZE_T gDiagAvailPhys = 0;
+static SIZE_T gDiagTotalVirtual = 0;
+static SIZE_T gDiagAvailVirtual = 0;
+static int gDiagControllerConnected = 0;
+static int gDiagSpeedCapRemoved = 0;
+static uint32_t gDiagRoomAgeFrames = 0;
+static uint32_t gDiagRoomTransitionHolds = 0;
 
 static bool diagOpenPath(const char* path, bool overwrite) {
     FILE* f = fopen(path, overwrite ? "wb" : "ab");
@@ -460,6 +489,107 @@ static void loadingDraw(LoadingScreen* ls, float progress, const char* stage) {
     dev->Present(NULL, NULL, NULL, NULL);
 }
 
+static bool diagOverlayInit(IDirect3DDevice9* dev, const char* dataWinPath) {
+    bool ok = loadingInit(&gDiagOverlayScreen, dev, dataWinPath);
+    if (gDiagOverlayScreen.splashTex) {
+        gDiagOverlayScreen.splashTex->Release();
+        gDiagOverlayScreen.splashTex = NULL;
+        gDiagOverlayScreen.splashW = 0;
+        gDiagOverlayScreen.splashH = 0;
+    }
+    return ok && gDiagOverlayScreen.fontTex && gDiagOverlayScreen.whiteTex;
+}
+
+static void diagOverlayDrawLine(const char* text, float* y, float scale, float r, float g, float b, float a) {
+    loadingDrawText(&gDiagOverlayScreen, text, 22.0f, *y, scale, r, g, b, a);
+    *y += (float)DEBUGFONT_LINE_HEIGHT * scale + 3.0f;
+}
+
+static float diagBytesToMb(SIZE_T bytes) {
+    return (float)((double)bytes / (1024.0 * 1024.0));
+}
+
+static void diagOverlayPollSystem(void) {
+    MEMORYSTATUS ms;
+    memset(&ms, 0, sizeof(ms));
+    ms.dwLength = sizeof(ms);
+    GlobalMemoryStatus(&ms);
+    gDiagTotalPhys = ms.dwTotalPhys;
+    gDiagAvailPhys = ms.dwAvailPhys;
+    gDiagTotalVirtual = ms.dwTotalVirtual;
+    gDiagAvailVirtual = ms.dwAvailVirtual;
+}
+
+static void diagOverlayDraw(Runner* runner, Renderer* renderer, int32_t frameW, int32_t frameH) {
+    if (!gDiagOverlayVisible || !runner || !gDiagOverlayScreen.available) return;
+
+    if (renderer && renderer->vtable && renderer->vtable->flush) {
+        renderer->vtable->flush(renderer);
+    }
+
+    loadingApplyState(&gDiagOverlayScreen);
+
+    const char* roomName = "(none)";
+    int32_t roomIndex = -1;
+    uint32_t roomSpeed = 0;
+    uint32_t roomW = 0;
+    uint32_t roomH = 0;
+    if (runner->currentRoom) {
+        roomName = runner->currentRoom->name ? runner->currentRoom->name : "(null)";
+        roomIndex = runner->currentRoomIndex;
+        roomSpeed = runner->currentRoom->speed;
+        roomW = runner->currentRoom->width;
+        roomH = runner->currentRoom->height;
+    }
+
+    const float x0 = 12.0f;
+    const float y0 = 12.0f;
+    const float x1 = 560.0f;
+    const float y1 = 222.0f;
+    loadingDrawQuad(&gDiagOverlayScreen, NULL, x0, y0, x1, y1,
+                    0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.72f);
+    loadingDrawQuad(&gDiagOverlayScreen, NULL, x0, y0, x1, y0 + 3.0f,
+                    0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 0.73f, 0.18f, 0.95f);
+
+    char line[256];
+    float y = y0 + 12.0f;
+    diagOverlayDrawLine("Butterscotch360-Refresh DIAG  (LB+RB)", &y, 0.42f, 1.0f, 0.90f, 0.45f, 1.0f);
+
+    _snprintf(line, sizeof(line) - 1, "FPS %.1f  dt %.2fms  steps %d  speed %u", gDiagOverlayFps, gDiagOverlayDtMs, gDiagOverlaySteps, roomSpeed);
+    line[sizeof(line) - 1] = '\0';
+    diagOverlayDrawLine(line, &y, 0.36f, 1.0f, 1.0f, 1.0f, 0.95f);
+
+    _snprintf(line, sizeof(line) - 1, "Room %d: %s", roomIndex, roomName);
+    line[sizeof(line) - 1] = '\0';
+    diagOverlayDrawLine(line, &y, 0.36f, 1.0f, 1.0f, 1.0f, 0.95f);
+
+    _snprintf(line, sizeof(line) - 1, "Room %ux%u  inst %d  pending %d", roomW, roomH, (int32_t)arrlen(runner->instances), runner->pendingRoom);
+    line[sizeof(line) - 1] = '\0';
+    diagOverlayDrawLine(line, &y, 0.36f, 0.82f, 0.92f, 1.0f, 0.95f);
+
+    SIZE_T usedPhys = gDiagTotalPhys > gDiagAvailPhys ? (gDiagTotalPhys - gDiagAvailPhys) : 0;
+    _snprintf(line, sizeof(line) - 1, "RAM %.1f/%.1f MB  free %.1f MB",
+              diagBytesToMb(usedPhys), diagBytesToMb(gDiagTotalPhys),
+              diagBytesToMb(gDiagAvailPhys));
+    line[sizeof(line) - 1] = '\0';
+    diagOverlayDrawLine(line, &y, 0.36f, 0.75f, 1.0f, 0.75f, 0.95f);
+
+    _snprintf(line, sizeof(line) - 1, "Virt free %.1f MB  pad %d  fast %d  roomAge %u hold %u",
+              diagBytesToMb(gDiagAvailVirtual), gDiagControllerConnected, gDiagSpeedCapRemoved,
+              gDiagRoomAgeFrames, gDiagRoomTransitionHolds);
+    line[sizeof(line) - 1] = '\0';
+    diagOverlayDrawLine(line, &y, 0.36f, 0.75f, 1.0f, 0.75f, 0.95f);
+
+    _snprintf(line, sizeof(line) - 1, "Game %dx%d  frame %dx%d  app %dx%d", SCREEN_WIDTH, SCREEN_HEIGHT, frameW, frameH, runner->applicationWidth, runner->applicationHeight);
+    line[sizeof(line) - 1] = '\0';
+    diagOverlayDrawLine(line, &y, 0.36f, 0.82f, 0.92f, 1.0f, 0.95f);
+
+    _snprintf(line, sizeof(line) - 1, "GUI %dx%d  surf auto=%d keep=%d id=%d", runner->guiWidth, runner->guiHeight,
+              runner->appSurfaceAutoDraw ? 1 : 0, runner->appSurfaceKeepWindowSize ? 1 : 0, runner->applicationSurfaceId);
+    line[sizeof(line) - 1] = '\0';
+    diagOverlayDrawLine(line, &y, 0.36f, 0.82f, 0.92f, 1.0f, 0.95f);
+}
+
 extern "C" void Butterscotch_xdkAbort(const char* file, int line) {
     diagOpenFallback();
     diagLog("BS: FATAL abort at %s:%d lastChunk=%s index=%d/%d", file ? file : "(null)", line, gLastParseChunk, gLastParseChunkIndex, gLastParseChunkTotal);
@@ -517,6 +647,24 @@ static DataWin* parseDataWinGuarded(const char* dataWinPath, DataWinParserOption
     return dataWin;
 }
 
+static bool initFirstRoomGuarded(Runner* runner) {
+    unsigned int exceptionCode = 0;
+    __try {
+        Runner_initFirstRoom(runner);
+    } __except (exceptionCode = GetExceptionCode(), EXCEPTION_EXECUTE_HANDLER) {
+        const char* roomName = "(none)";
+        int roomIndex = -1;
+        if (runner && runner->currentRoom) {
+            roomName = runner->currentRoom->name ? runner->currentRoom->name : "(null)";
+            roomIndex = runner->currentRoomIndex;
+        }
+        diagLog("BS: FATAL exception 0x%08X during Runner_initFirstRoom room=%d name=%s",
+            exceptionCode, roomIndex, roomName);
+        return false;
+    }
+    return true;
+}
+
 // ===[ Controller Mapping ]===
 
 typedef struct {
@@ -529,6 +677,7 @@ static int xpadMappingCount = 0;
 static WORD prevButtons = 0;
 static BYTE prevLeftTrigger = 0;
 static BYTE prevRightTrigger = 0;
+static bool gamepadApiEnabled = false;
 
 static void setupDefaultMappings(void) {
     static XpadMapping defaults[] = {
@@ -548,19 +697,141 @@ static void setupDefaultMappings(void) {
     memcpy(xpadMappings, defaults, sizeof(defaults));
 }
 
+static const char* osTypeName(YoYoOperatingSystem osType) {
+    switch (osType) {
+        case OS_WINDOWS: return "windows";
+        case OS_XBOX360: return "xbox360";
+        case OS_XBOXONE: return "xboxone";
+        case OS_SWITCH: return "switch";
+        case OS_PS4: return "ps4";
+        case OS_PS3: return "ps3";
+        default: return "unknown";
+    }
+}
+
+static bool parseOsTypeName(const char* text, YoYoOperatingSystem* out) {
+    if (!text || !out) return false;
+    if (_stricmp(text, "windows") == 0 || _stricmp(text, "win32") == 0) {
+        *out = OS_WINDOWS;
+        return true;
+    }
+    if (_stricmp(text, "xbox360") == 0 || _stricmp(text, "x360") == 0) {
+        *out = OS_XBOX360;
+        return true;
+    }
+    if (_stricmp(text, "xboxone") == 0 || _stricmp(text, "xbone") == 0 || _stricmp(text, "xbox") == 0) {
+        *out = OS_XBOXONE;
+        return true;
+    }
+    if (_stricmp(text, "switch") == 0) {
+        *out = OS_SWITCH;
+        return true;
+    }
+    if (_stricmp(text, "ps4") == 0) {
+        *out = OS_PS4;
+        return true;
+    }
+    if (_stricmp(text, "ps3") == 0) {
+        *out = OS_PS3;
+        return true;
+    }
+    return false;
+}
+
+static float normalizeStickAxis(SHORT value) {
+    if (value >= 0) return (float)value / 32767.0f;
+    return (float)value / 32768.0f;
+}
+
+static void setGamepadButton(GamepadSlot* slot, int index, bool down) {
+    if (index < 0 || index >= GP_BUTTON_COUNT) return;
+    slot->buttonDown[index] = down;
+    slot->buttonValue[index] = down ? 1.0f : 0.0f;
+}
+
+static void pollGamepadApi(Runner* runner, const XINPUT_STATE* state, WORD buttons, bool connected) {
+    if (!runner || !runner->gamepads) return;
+
+    RunnerGamepad_beginFrame(runner->gamepads);
+    GamepadSlot* slot = &runner->gamepads->slots[0];
+    memcpy(slot->buttonDownPrev, slot->buttonDown, sizeof(slot->buttonDown));
+    memset(slot->buttonDown, 0, sizeof(slot->buttonDown));
+    memset(slot->buttonValue, 0, sizeof(slot->buttonValue));
+    memset(slot->axisValue, 0, sizeof(slot->axisValue));
+
+    if (!connected || !state) {
+        slot->connected = false;
+        return;
+    }
+
+    static bool loggedGamepadConnected = false;
+    slot->connected = true;
+    slot->jid = 0;
+    strncpy(slot->description, "Xbox 360 Controller", sizeof(slot->description) - 1);
+    slot->description[sizeof(slot->description) - 1] = '\0';
+    strncpy(slot->guid, "xinput-xbox360", sizeof(slot->guid) - 1);
+    slot->guid[sizeof(slot->guid) - 1] = '\0';
+
+    setGamepadButton(slot, 0,  (buttons & XINPUT_GAMEPAD_A) != 0);
+    setGamepadButton(slot, 1,  (buttons & XINPUT_GAMEPAD_B) != 0);
+    setGamepadButton(slot, 2,  (buttons & XINPUT_GAMEPAD_X) != 0);
+    setGamepadButton(slot, 3,  (buttons & XINPUT_GAMEPAD_Y) != 0);
+    setGamepadButton(slot, 4,  (buttons & XINPUT_GAMEPAD_LEFT_SHOULDER) != 0);
+    setGamepadButton(slot, 5,  (buttons & XINPUT_GAMEPAD_RIGHT_SHOULDER) != 0);
+    setGamepadButton(slot, 8,  (buttons & XINPUT_GAMEPAD_BACK) != 0);
+    setGamepadButton(slot, 9,  (buttons & XINPUT_GAMEPAD_START) != 0);
+    setGamepadButton(slot, 10, (buttons & XINPUT_GAMEPAD_LEFT_THUMB) != 0);
+    setGamepadButton(slot, 11, (buttons & XINPUT_GAMEPAD_RIGHT_THUMB) != 0);
+    setGamepadButton(slot, 12, (buttons & XINPUT_GAMEPAD_DPAD_UP) != 0);
+    setGamepadButton(slot, 13, (buttons & XINPUT_GAMEPAD_DPAD_DOWN) != 0);
+    setGamepadButton(slot, 14, (buttons & XINPUT_GAMEPAD_DPAD_LEFT) != 0);
+    setGamepadButton(slot, 15, (buttons & XINPUT_GAMEPAD_DPAD_RIGHT) != 0);
+
+    slot->buttonValue[6] = (float)state->Gamepad.bLeftTrigger / 255.0f;
+    slot->buttonValue[7] = (float)state->Gamepad.bRightTrigger / 255.0f;
+    slot->buttonDown[6] = slot->buttonValue[6] >= slot->triggerThreshold;
+    slot->buttonDown[7] = slot->buttonValue[7] >= slot->triggerThreshold;
+
+    slot->axisValue[0] = normalizeStickAxis(state->Gamepad.sThumbLX);
+    slot->axisValue[1] = -normalizeStickAxis(state->Gamepad.sThumbLY);
+    slot->axisValue[2] = normalizeStickAxis(state->Gamepad.sThumbRX);
+    slot->axisValue[3] = -normalizeStickAxis(state->Gamepad.sThumbRY);
+
+    for (int i = 0; i < GP_BUTTON_COUNT; i++) {
+        bool wasDown = slot->buttonDownPrev[i];
+        if (slot->buttonDown[i] && !wasDown) slot->buttonPressed[i] = true;
+        if (!slot->buttonDown[i] && wasDown) slot->buttonReleased[i] = true;
+    }
+    runner->gamepads->connectedCount = 1;
+    if (!loggedGamepadConnected) {
+        diagLog("BS: gamepad API slot0 connected desc=%s guid=%s", slot->description, slot->guid);
+        loggedGamepadConnected = true;
+    }
+}
+
 static void drawRunnerFrame(Runner* runner, Renderer* renderer, int32_t gameW, int32_t gameH) {
+    int32_t frameW = gameW;
+    int32_t frameH = gameH;
+    if (runner && !runner->appSurfaceKeepWindowSize && !runner->appSurfaceAutoDraw && runner->currentRoom &&
+        runner->currentRoom->width > 0 && runner->currentRoom->height > 0 &&
+        runner->currentRoom->width < (uint32_t)frameW && runner->currentRoom->height < (uint32_t)frameH) {
+        frameW = (int32_t)runner->currentRoom->width;
+        frameH = (int32_t)runner->currentRoom->height;
+    }
+
     float displayScaleX;
     float displayScaleY;
-    runner->renderGameW = gameW;
-    runner->renderGameH = gameH;
+    runner->renderGameW = frameW;
+    runner->renderGameH = frameH;
     Runner_drawPre(runner, SCREEN_WIDTH, SCREEN_HEIGHT);
-    Runner_computeViewDisplayScale(runner, gameW, gameH, &displayScaleX, &displayScaleY);
-    Runner_beginFrame(runner, gameW, gameH, SCREEN_WIDTH, SCREEN_HEIGHT);
-    Runner_drawViews(runner, gameW, gameH, displayScaleX, displayScaleY, false);
+    Runner_computeViewDisplayScale(runner, frameW, frameH, &displayScaleX, &displayScaleY);
+    Runner_beginFrame(runner, frameW, frameH, SCREEN_WIDTH, SCREEN_HEIGHT);
+    Runner_drawViews(runner, frameW, frameH, displayScaleX, displayScaleY, false);
     renderer->vtable->endFrameInit(renderer);
     Runner_drawPost(runner, SCREEN_WIDTH, SCREEN_HEIGHT);
+    Runner_drawGUI(runner, SCREEN_WIDTH, SCREEN_HEIGHT, frameW, frameH);
+    diagOverlayDraw(runner, renderer, frameW, frameH);
     renderer->vtable->endFrameEnd(renderer);
-    Runner_drawGUI(runner, SCREEN_WIDTH, SCREEN_HEIGHT, gameW, gameH);
 }
 
 // ===[ Main Entry Point ]===
@@ -664,6 +935,11 @@ VOID __cdecl main() {
         loadingDestroy(&gLoadingScreen);
         loadingOk = false;
     }
+    if (diagOverlayInit(pd3dDevice, dataWinPath)) {
+        diagLog("DIAG: overlay renderer ready; toggle with LB+RB");
+    } else {
+        diagLog("DIAG: overlay renderer unavailable");
+    }
 
     diagLog("BS: game=%s", dataWin->gen8.displayName ? dataWin->gen8.displayName : "Unknown");
 
@@ -710,9 +986,24 @@ VOID __cdecl main() {
     VMContext* vm = VM_create(dataWin);
     diagLog("BS: 12 creating runner");
     Runner* runner = Runner_create(dataWin, vm, renderer, fileSystem, audioSystem);
+    runner->getWindowSize = xdkGetWindowSize;
+    runner->setWindowSize = xdkSetWindowSize;
+    runner->osType = OS_WINDOWS;
+    diagLog("BS: 12b runner created with renderer/audio initialized");
 
     // Parse CONFIG.JSN options
     if (configRoot) {
+        JsonValue* osTypeVal = JsonReader_getObject(configRoot, "osType");
+        if (osTypeVal && JsonReader_isString(osTypeVal)) {
+            YoYoOperatingSystem configuredOsType;
+            const char* osText = JsonReader_getString(osTypeVal);
+            if (parseOsTypeName(osText, &configuredOsType)) {
+                runner->osType = configuredOsType;
+            } else {
+                diagLog("CONFIG.JSN: unknown osType '%s', keeping %s", osText, osTypeName(runner->osType));
+            }
+        }
+
         JsonValue* disabledArr = JsonReader_getObject(configRoot, "disabledObjects");
         if (disabledArr && JsonReader_isArray(disabledArr)) {
             sh_new_strdup(runner->disabledObjects);
@@ -737,22 +1028,50 @@ VOID __cdecl main() {
                 xpadMappings[i].gmlKey = (int32_t)JsonReader_getInt(gmlVal);
             }
         }
+
+        JsonValue* gamepadApiVal = JsonReader_getObject(configRoot, "gamepadApi");
+        if (gamepadApiVal) {
+            if (JsonReader_isBool(gamepadApiVal)) {
+                gamepadApiEnabled = JsonReader_getBool(gamepadApiVal);
+            } else if (JsonReader_isObject(gamepadApiVal)) {
+                JsonValue* enabledVal = JsonReader_getObject(gamepadApiVal, "enabled");
+                if (enabledVal) gamepadApiEnabled = JsonReader_getBool(enabledVal);
+            }
+        }
     }
 
     if (!xpadMappings) setupDefaultMappings();
+    diagLog("BS: osType=%s (%d)", osTypeName(runner->osType), (int)runner->osType);
+    diagLog("BS: gamepadApi=%s", gamepadApiEnabled ? "enabled" : "disabled");
 
-    // Initialize audio
-    audioSystem->vtable->init(audioSystem, dataWin, fileSystem);
     diagLog("BS: 13 audio OK");
-
-    // Initialize renderer
-    diagLog("BS: 14 init renderer");
-    renderer->vtable->init(renderer, dataWin);
+    diagLog("BS: 14 renderer already initialized by Runner_create");
     diagLog("BS: 15 renderer OK");
 
     // Initialize first room
     diagLog("BS: 16 init first room");
-    Runner_initFirstRoom(runner);
+    if (dataWin->gen8.roomOrderCount > 0) {
+        int32_t firstRoomIndex = dataWin->gen8.roomOrder[0];
+        if (firstRoomIndex >= 0 && dataWin->room.count > (uint32_t)firstRoomIndex) {
+            Room* firstRoom = &dataWin->room.rooms[firstRoomIndex];
+            diagLog("BS: first room idx=%d name=%s size=%ux%u objects=%u layers=%u tiles=%u",
+                firstRoomIndex,
+                firstRoom->name ? firstRoom->name : "(null)",
+                firstRoom->width,
+                firstRoom->height,
+                firstRoom->gameObjectCount,
+                firstRoom->layerCount,
+                firstRoom->tileCount);
+        } else {
+            diagLog("BS: first room index out of range idx=%d roomCount=%u",
+                firstRoomIndex, dataWin->room.count);
+        }
+    } else {
+        diagLog("BS: no room order entries");
+    }
+    if (!initFirstRoomGuarded(runner)) {
+        for (;;) { Sleep(1000); }
+    }
     diagLog("BS: 17 first room OK");
 
     Gen8* gen8 = &dataWin->gen8;
@@ -775,9 +1094,11 @@ VOID __cdecl main() {
     QueryPerformanceCounter(&lastTime);
     LARGE_INTEGER startTime = lastTime;
     LARGE_INTEGER lastHeartbeatTime = lastTime;
+    LARGE_INTEGER lastDiagSystemPollTime = lastTime;
     double accumulator = 0.0;
     uint32_t heartbeatFrame = 0;
     int32_t lastRoomId = runner->currentRoomIndex;
+    diagOverlayPollSystem();
 
     while (!runner->shouldExit) {
         QueryPerformanceCounter(&currentTime);
@@ -786,8 +1107,13 @@ VOID __cdecl main() {
 
         // ===[ Poll Controller ]===
         XINPUT_STATE state;
-        if (XInputGetState(0, &state) == ERROR_SUCCESS) {
-            WORD buttons = state.Gamepad.wButtons;
+        ZeroMemory(&state, sizeof(state));
+        DWORD xinputResult = XInputGetState(0, &state);
+        WORD buttons = 0;
+        bool controllerConnected = xinputResult == ERROR_SUCCESS;
+        gDiagControllerConnected = controllerConnected ? 1 : 0;
+        if (controllerConnected) {
+            buttons = state.Gamepad.wButtons;
 
             // Left thumbstick as dpad
             #define STICK_DEADZONE 16384
@@ -797,24 +1123,38 @@ VOID __cdecl main() {
             if (lx >  STICK_DEADZONE) buttons |= XINPUT_GAMEPAD_DPAD_RIGHT;
             if (ly >  STICK_DEADZONE) buttons |= XINPUT_GAMEPAD_DPAD_UP;
             if (ly < -STICK_DEADZONE) buttons |= XINPUT_GAMEPAD_DPAD_DOWN;
-
-            for (int i = 0; i < xpadMappingCount; i++) {
-                WORD mask = xpadMappings[i].xpadButton;
-                int32_t gmlKey = xpadMappings[i].gmlKey;
-
-                bool wasPressed = (prevButtons & mask) != 0;
-                bool isPressed = (buttons & mask) != 0;
-
-                if (isPressed && !wasPressed)
-                    RunnerKeyboard_onKeyDown(runner->keyboard, gmlKey);
-                else if (!isPressed && wasPressed)
-                    RunnerKeyboard_onKeyUp(runner->keyboard, gmlKey);
-            }
-            prevButtons = buttons;
-            prevRightTrigger = state.Gamepad.bRightTrigger;
         }
 
+        if (gamepadApiEnabled) {
+            pollGamepadApi(runner, &state, buttons, controllerConnected);
+        }
+
+        bool diagComboDown = controllerConnected &&
+            ((buttons & XINPUT_GAMEPAD_LEFT_SHOULDER) != 0) &&
+            ((buttons & XINPUT_GAMEPAD_RIGHT_SHOULDER) != 0);
+        if (diagComboDown && !gDiagOverlayComboWasDown) {
+            gDiagOverlayVisible = !gDiagOverlayVisible;
+            diagLog("DIAG: overlay %s", gDiagOverlayVisible ? "on" : "off");
+        }
+        gDiagOverlayComboWasDown = diagComboDown;
+
+        for (int i = 0; i < xpadMappingCount; i++) {
+            WORD mask = xpadMappings[i].xpadButton;
+            int32_t gmlKey = xpadMappings[i].gmlKey;
+
+            bool wasPressed = (prevButtons & mask) != 0;
+            bool isPressed = (buttons & mask) != 0;
+
+            if (isPressed && !wasPressed)
+                RunnerKeyboard_onKeyDown(runner->keyboard, gmlKey);
+            else if (!isPressed && wasPressed)
+                RunnerKeyboard_onKeyUp(runner->keyboard, gmlKey);
+        }
+        prevButtons = buttons;
+        prevRightTrigger = controllerConnected ? state.Gamepad.bRightTrigger : 0;
+
         bool speedCapRemoved = prevRightTrigger > 128;
+        gDiagSpeedCapRemoved = speedCapRemoved ? 1 : 0;
 
         // ===[ Frame Pacing ]===
         uint32_t roomSpeed = runner->currentRoom->speed;
@@ -832,19 +1172,28 @@ VOID __cdecl main() {
         if (speedCapRemoved && targetFrameTime > accumulator) accumulator = targetFrameTime;
 
         int gameFramesRan = 0;
+        bool heldRoomTransitionFrame = false;
         while (accumulator >= targetFrameTime) {
             if (gameFramesRan > 0)
                 RunnerKeyboard_beginFrame(runner->keyboard);
 
             Runner_step(runner);
+            bool roomChangedThisStep = false;
             if (runner->currentRoom && runner->currentRoomIndex != lastRoomId) {
                 lastRoomId = runner->currentRoomIndex;
+                gDiagRoomAgeFrames = 0;
+                roomChangedThisStep = true;
                 diagLog("ROOM_CHANGED id=%d name=%s", lastRoomId, runner->currentRoom->name ? runner->currentRoom->name : "(null)");
                 XdkAudioSystem_onRoomChanged(runner->audioSystem, lastRoomId, runner->currentRoom->name);
             }
 
             if (!deferDraw) {
-                drawRunnerFrame(runner, renderer, gameW, gameH);
+                if (roomChangedThisStep && runner->appSurfaceKeepWindowSize) {
+                    heldRoomTransitionFrame = true;
+                    gDiagRoomTransitionHolds++;
+                } else {
+                    drawRunnerFrame(runner, renderer, gameW, gameH);
+                }
             }
 
             accumulator -= targetFrameTime;
@@ -852,7 +1201,7 @@ VOID __cdecl main() {
         }
 
         // Deferred draw: render once after all catch-up steps
-        if (deferDraw && gameFramesRan > 0) {
+        if (deferDraw && gameFramesRan > 0 && !(heldRoomTransitionFrame && runner->appSurfaceKeepWindowSize)) {
             drawRunnerFrame(runner, renderer, gameW, gameH);
         }
 
@@ -865,6 +1214,24 @@ VOID __cdecl main() {
         }
 
         if (gameFramesRan > 0) {
+            gDiagRoomAgeFrames += (uint32_t)gameFramesRan;
+            double elapsedForDiag = (double)(currentTime.QuadPart - startTime.QuadPart) / (double)freq.QuadPart;
+            if (gDiagOverlayWindowStart <= 0.0) gDiagOverlayWindowStart = elapsedForDiag;
+            gDiagOverlayFrameCount += (uint32_t)gameFramesRan;
+            gDiagOverlayDtMs = (float)(deltaTime * 1000.0);
+            gDiagOverlaySteps = gameFramesRan;
+            double diagElapsed = elapsedForDiag - gDiagOverlayWindowStart;
+            if (diagElapsed >= 0.5) {
+                gDiagOverlayFps = diagElapsed > 0.0 ? (float)((double)gDiagOverlayFrameCount / diagElapsed) : 0.0f;
+                gDiagOverlayFrameCount = 0;
+                gDiagOverlayWindowStart = elapsedForDiag;
+            }
+            double sysPollElapsed = (double)(currentTime.QuadPart - lastDiagSystemPollTime.QuadPart) / (double)freq.QuadPart;
+            if (sysPollElapsed >= 1.0) {
+                diagOverlayPollSystem();
+                lastDiagSystemPollTime = currentTime;
+            }
+
             heartbeatFrame += (uint32_t) gameFramesRan;
             if ((heartbeatFrame % 120) < (uint32_t) gameFramesRan) {
                 double elapsed = (double)(currentTime.QuadPart - startTime.QuadPart) / (double)freq.QuadPart;
@@ -883,6 +1250,7 @@ VOID __cdecl main() {
         runner->audioSystem = NULL;
     }
     renderer->vtable->destroy(renderer);
+    loadingDestroy(&gDiagOverlayScreen);
     DataWin_free(dataWin);
     pd3dDevice->Release();
     pD3D->Release();

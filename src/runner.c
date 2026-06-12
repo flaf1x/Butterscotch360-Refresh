@@ -16,6 +16,41 @@
 #include "debug_overlay.h"
 #include "stb_ds.h"
 
+#ifdef _XBOX
+#ifdef __cplusplus
+extern "C" {
+#endif
+extern void Butterscotch_xdkDiagTrace(const char* fmt, ...);
+#ifdef __cplusplus
+}
+#endif
+#define RUNNER_TRACE(...) Butterscotch_xdkDiagTrace(__VA_ARGS__)
+#else
+#define RUNNER_TRACE(...) ((void)0)
+#endif
+
+static bool DataWin_hasSpriteNamed(DataWin* dataWin, const char* name) {
+    if (dataWin == nullptr || dataWin->sprt.sprites == nullptr || name == nullptr) return false;
+    repeat(dataWin->sprt.count, i) {
+        Sprite* sprite = &dataWin->sprt.sprites[i];
+        if (!sprite->present || sprite->name == nullptr) continue;
+        if (strcmp(sprite->name, name) == 0) return true;
+    }
+    return false;
+}
+
+static bool DataWin_prefersWindowSizedApplicationSurface(DataWin* dataWin) {
+    bool has1080Border =
+        DataWin_hasSpriteNamed(dataWin, "bg_border_ruins_1080") ||
+        DataWin_hasSpriteNamed(dataWin, "bg_border_line_1080") ||
+        DataWin_hasSpriteNamed(dataWin, "bg_border_sepia_1080");
+    bool hasConsoleButtons =
+        DataWin_hasSpriteNamed(dataWin, "button_xbox_a") ||
+        DataWin_hasSpriteNamed(dataWin, "button_switch_a") ||
+        DataWin_hasSpriteNamed(dataWin, "button_ps_a");
+    return has1080Border && hasConsoleButtons;
+}
+
 // ===[ Runtime Layer Teardown Helpers ]===
 void Runner_freeRuntimeLayer(RuntimeLayer* runtimeLayer) {
     if (runtimeLayer->dynamicName != nullptr) {
@@ -936,10 +971,22 @@ void Runner_drawGUI(Runner* runner, int32_t windowW, int32_t windowH, int32_t ta
 
     int32_t guiW = runner->guiWidth > 0 ? runner->guiWidth : targetW;
     int32_t guiH = runner->guiHeight > 0 ? runner->guiHeight : targetH;
+    if (runner->appSurfaceKeepWindowSize && runner->guiWidth <= 0 && runner->guiHeight <= 0) {
+        guiW = windowW;
+        guiH = windowH;
+    }
+    if (!runner->appSurfaceKeepWindowSize && !runner->appSurfaceAutoDraw && runner->currentRoom != nullptr &&
+        runner->currentRoom->width > 0 && runner->currentRoom->height > 0 &&
+        runner->currentRoom->width < (uint32_t)guiW && runner->currentRoom->height < (uint32_t)guiH) {
+        guiW = (int32_t)runner->currentRoom->width;
+        guiH = (int32_t)runner->currentRoom->height;
+    }
     runner->renderer->vtable->beginGUI(runner->renderer, guiW, guiH, 0, 0, windowW, windowH);
+    runner->renderer->drawPhase = RENDER_PHASE_GUI;
     fireDrawSubtype(runner, drawables, drawableCount, DRAW_GUI_BEGIN);
     fireDrawSubtype(runner, drawables, drawableCount, DRAW_GUI);
     fireDrawSubtype(runner, drawables, drawableCount, DRAW_GUI_END);
+    runner->renderer->drawPhase = RENDER_PHASE_NONE;
     runner->renderer->vtable->endGUI(runner->renderer);
 }
 
@@ -949,7 +996,9 @@ void Runner_drawPre(Runner* runner, int32_t windowW, int32_t windowH) {
     int32_t drawableCount = (int32_t) arrlen(drawables);
 
     runner->renderer->vtable->beginGUI(runner->renderer, windowW, windowH, 0, 0, windowW, windowH);
+    runner->renderer->drawPhase = RENDER_PHASE_PRE;
     fireDrawSubtype(runner, drawables, drawableCount, DRAW_PRE);
+    runner->renderer->drawPhase = RENDER_PHASE_NONE;
     runner->renderer->vtable->endGUI(runner->renderer);
 }
 
@@ -958,8 +1007,18 @@ void Runner_drawPost(Runner* runner, int32_t windowW, int32_t windowH) {
     Drawable* drawables = runner->cachedDrawables;
     int32_t drawableCount = (int32_t) arrlen(drawables);
 
-    runner->renderer->vtable->beginGUI(runner->renderer, windowW, windowH, 0, 0, windowW, windowH);
+    int32_t postW = windowW;
+    int32_t postH = windowH;
+    if (!runner->appSurfaceKeepWindowSize && !runner->appSurfaceAutoDraw && runner->currentRoom != nullptr &&
+        runner->currentRoom->width > 0 && runner->currentRoom->height > 0 &&
+        runner->currentRoom->width < (uint32_t)postW && runner->currentRoom->height < (uint32_t)postH) {
+        postW = (int32_t)runner->currentRoom->width;
+        postH = (int32_t)runner->currentRoom->height;
+    }
+    runner->renderer->vtable->beginGUI(runner->renderer, postW, postH, 0, 0, windowW, windowH);
+    runner->renderer->drawPhase = RENDER_PHASE_POST;
     fireDrawSubtype(runner, drawables, drawableCount, DRAW_POST);
+    runner->renderer->drawPhase = RENDER_PHASE_NONE;
     runner->renderer->vtable->endGUI(runner->renderer);
 }
 
@@ -1049,7 +1108,9 @@ void Runner_drawViews(Runner* runner, int32_t gameW, int32_t gameH, float displa
             runner->viewCurrent = (int32_t) vi;
             renderer->vtable->beginView(renderer, viewX, viewY, viewW, viewH, portX, portY, portW, portH, viewAngle);
 
+            renderer->drawPhase = RENDER_PHASE_WORLD;
             Runner_draw(runner);
+            renderer->drawPhase = RENDER_PHASE_NONE;
 
             if (debugShowCollisionMasks) DebugOverlay_drawCollisionMasks(runner);
 
@@ -1069,7 +1130,9 @@ void Runner_drawViews(Runner* runner, int32_t gameW, int32_t gameH, float displa
         int32_t fullViewH = gameH;
         applyFreeCamera(runner, &fullViewX, &fullViewY, &fullViewW, &fullViewH);
         renderer->vtable->beginView(renderer, fullViewX, fullViewY, fullViewW, fullViewH, 0, 0, gameW, gameH, 0.0f);
+        renderer->drawPhase = RENDER_PHASE_WORLD;
         Runner_draw(runner);
+        renderer->drawPhase = RENDER_PHASE_NONE;
 
         if (debugShowCollisionMasks) DebugOverlay_drawCollisionMasks(runner);
 
@@ -1220,6 +1283,14 @@ static void initRoom(Runner* runner, int32_t roomIndex) {
     require(roomIndex >= 0 && dataWin->room.count > (uint32_t) roomIndex);
 
     Room* room = &dataWin->room.rooms[roomIndex];
+    RUNNER_TRACE("RUNNER: initRoom begin idx=%d name=%s size=%ux%u objects=%u layers=%u tiles=%u",
+        roomIndex,
+        room->name ? room->name : "(null)",
+        room->width,
+        room->height,
+        room->gameObjectCount,
+        room->layerCount,
+        room->tileCount);
 
     // Lazy-room load: if the payload wasn't loaded, read it from the data.win file now before anything touches the room's game objects/tiles/layers.
     if (!room->payloadLoaded) {
@@ -1237,6 +1308,7 @@ static void initRoom(Runner* runner, int32_t roomIndex) {
     if (runner->spatialGrid != nullptr)
         SpatialGrid_free(runner->spatialGrid);
     runner->spatialGrid = SpatialGrid_create(room->width, room->height);
+    RUNNER_TRACE("RUNNER: initRoom spatial grid OK");
 
     // Find position in room order
     runner->currentRoomOrderPosition = -1;
@@ -1322,6 +1394,7 @@ static void initRoom(Runner* runner, int32_t roomIndex) {
     }
     // Watermark: ensure runtime-allocated IDs (layers + elements) stay above parsed IDs.
     if (maxLayerId >= runner->nextLayerId) runner->nextLayerId = maxLayerId + 1;
+    RUNNER_TRACE("RUNNER: initRoom runtime layers OK count=%u", room->layerCount);
 
     // Populate runtime sprite elements for Assets layers, so they can be queried and destroyed via layer_sprite_get_sprite/layer_sprite_destroy
     repeat(room->layerCount, i) {
@@ -1364,6 +1437,7 @@ static void initRoom(Runner* runner, int32_t roomIndex) {
             arrput(runtimeLayer->elements, el);
         }
     }
+    RUNNER_TRACE("RUNNER: initRoom layer assets OK");
 
     // Copy room background definitions into mutable runtime state
     runner->backgroundColor = room->backgroundColor;
@@ -1414,9 +1488,13 @@ static void initRoom(Runner* runner, int32_t roomIndex) {
         inst->imageSpeed = roomObj->imageSpeed;
         inst->imageIndex = (float) roomObj->imageIndex;
         // Room editor stores per-instance color as ABGR (0xAABBGGRR): low 24 bits feed image_blend, top 8 bits feed image_alpha.
+        // Some GMS2 exports leave the alpha byte at 0 for the editor default, matching tiles where 0 means fully opaque.
+        uint8_t alphaByte = (uint8_t) ((roomObj->color >> 24) & 0xFF);
         inst->imageBlend = roomObj->color & 0x00FFFFFF;
-        inst->imageAlpha = (float) ((roomObj->color >> 24) & 0xFF) / 255.0f;
+        inst->imageAlpha = alphaByte == 0 ? 1.0f : (float) alphaByte / 255.0f;
     }
+    RUNNER_TRACE("RUNNER: initRoom pass1 instances OK count=%u live=%d",
+        room->gameObjectCount, (int) arrlen(runner->instances));
 
     // In GMS2, instances get their depth from their room layer, not the object definition.
     // This must happen before firing Create events so scripts like scr_depth() read the layer depth.
@@ -1442,6 +1520,13 @@ static void initRoom(Runner* runner, int32_t roomIndex) {
     // Pass 2: Fire events for newly created instances (in room definition order)
     repeat(room->gameObjectCount, i) {
         RoomGameObject* roomObj = &room->gameObjects[i];
+        RUNNER_TRACE("RUNNER: initRoom pass2 instance %u/%u id=%d obj=%d pre=%d createCode=%d",
+            i + 1,
+            room->gameObjectCount,
+            roomObj->instanceID,
+            roomObj->objectDefinition,
+            roomObj->preCreateCode,
+            roomObj->creationCode);
 
         Instance* inst = hmget(runner->instancesById, roomObj->instanceID);
         if (inst == nullptr) continue;
@@ -1456,9 +1541,11 @@ static void initRoom(Runner* runner, int32_t roomIndex) {
         Runner_executeEvent(runner, inst, EVENT_CREATE, 0);
         executeCode(runner, inst, roomObj->creationCode);
     }
+    RUNNER_TRACE("RUNNER: initRoom pass2 events OK");
 
     // Run room creation code
     if (room->creationCodeId >= 0 && dataWin->code.count > (uint32_t) room->creationCodeId) {
+        RUNNER_TRACE("RUNNER: initRoom room creation code id=%d", room->creationCodeId);
         // Room creation code runs in global context, the native runner creates a fake/dummy instance for the "self"
         Instance* dummy = Instance_create(0, STRUCT_OBJECT_INDEX, 0, 0);
         runner->vmContext->currentInstance = dummy;
@@ -1467,6 +1554,7 @@ static void initRoom(Runner* runner, int32_t roomIndex) {
         runner->vmContext->currentInstance = nullptr;
         Instance_free(dummy);
     }
+    RUNNER_TRACE("RUNNER: initRoom room creation OK");
 
     // Mark this room as initialized for persistent room support
     savedState->initialized = true;
@@ -1854,6 +1942,7 @@ Runner* Runner_create(DataWin* dataWin, VMContext* vm, Renderer* renderer, FileS
     runner->appSurfaceEnabled = true;
     runner->appSurfaceAutoDraw = true;
     runner->usingAppSurface = true;
+    runner->appSurfaceKeepWindowSize = DataWin_prefersWindowSizedApplicationSurface(dataWin);
     runner->applicationWidth = (int32_t) dataWin->gen8.defaultWindowWidth;
     runner->applicationHeight = (int32_t) dataWin->gen8.defaultWindowHeight;
     runner->oldApplicationWidth = runner->applicationWidth;
@@ -1867,6 +1956,9 @@ Runner* Runner_create(DataWin* dataWin, VMContext* vm, Renderer* renderer, FileS
     renderer->runner = runner;
     runner->viewportW = 1;
     runner->viewportH = 1;
+    RUNNER_TRACE("RUNNER: application_surface keepWindow=%d default=%dx%d",
+                 runner->appSurfaceKeepWindowSize ? 1 : 0,
+                 runner->applicationWidth, runner->applicationHeight);
 
     repeat(MAX_SURFACES, i) {
         runner->surfaceStack[i] = -1;
@@ -3512,7 +3604,15 @@ int32_t Runner_surfaceGetTarget(Runner* runner) {
 
 void Runner_beginFrame(Runner* runner, int32_t gameW, int32_t gameH, int32_t windowW, int32_t windowH) {
     Renderer* renderer = runner->renderer;
-    runner->applicationSurfaceId = renderer->vtable->ensureApplicationSurface(renderer, gameW, gameH);
+    int32_t appW = runner->applicationWidth > 0 ? runner->applicationWidth : gameW;
+    int32_t appH = runner->applicationHeight > 0 ? runner->applicationHeight : gameH;
+    if (!runner->appSurfaceKeepWindowSize && !runner->appSurfaceAutoDraw && runner->currentRoom != nullptr &&
+        runner->currentRoom->width > 0 && runner->currentRoom->height > 0 &&
+        runner->currentRoom->width < (uint32_t)appW && runner->currentRoom->height < (uint32_t)appH) {
+        appW = (int32_t)runner->currentRoom->width;
+        appH = (int32_t)runner->currentRoom->height;
+    }
+    runner->applicationSurfaceId = renderer->vtable->ensureApplicationSurface(renderer, appW, appH);
     renderer->vtable->beginFrame(renderer, gameW, gameH, windowW, windowH);
 }
 

@@ -1,243 +1,153 @@
-<h1 align="center">🥧 Butterscotch 🥧</h1>
+# Butterscotch360-Refresh
 
-## Butterscotch360-Refresh
+Butterscotch360-Refresh is an experimental Xbox 360 refresh of
+[Butterscotch](https://github.com/ButterscotchRunner/Butterscotch), an open
+source reimplementation of the GameMaker: Studio runner. The practical goal is
+simple: make Undertale-era GameMaker games run on real Xbox 360 hardware with a
+maintainable source tree instead of relying on one old binary.
 
-This repository is an experimental refresh of the Xbox 360 port of
-[Butterscotch](https://github.com/ButterscotchRunner/Butterscotch), an open source
-GameMaker: Studio runner reimplementation. The goal of this fork is to bring the
-old Xbox 360 port closer to the current Butterscotch codebase while keeping it
-usable on real Xbox 360 hardware.
+This repository started from
+[ceilingtilefan/Butterscotch-360](https://github.com/ceilingtilefan/Butterscotch-360),
+but it is not just a rebuild of that old fork. It refreshes the port against a
+much newer Butterscotch codebase and adds the Xbox 360-specific runtime pieces
+needed for current testing:
 
-It is not the same thing as the original
-[ceilingtilefan/Butterscotch-360](https://github.com/ceilingtilefan/Butterscotch-360)
-fork. That project was the first Xbox 360 port and targeted an older snapshot of
-Butterscotch. This refresh rebases the idea onto a much newer upstream, adds a
-Visual Studio 2010 / Xbox 360 XDK project, a D3D9 renderer, an XAudio2 backend,
-diagnostic logging, startup splash/progress rendering, and a bunch of Undertale
-compatibility fixes found while testing on hardware.
+- Visual Studio 2010 / Xbox 360 SDK project files.
+- Xbox 360 D3D9 renderer with point-sampled pixel output.
+- XAudio2 audio backend with streamed OGG music playback.
+- Startup splash/progress screen.
+- Runtime diagnostics written to `bs360_refresh.log`.
+- Toggleable on-screen diagnostics with `LB + RB`.
+- Undertale and NXTale compatibility fixes tested on real hardware.
 
-And, yeah, it’s a double vibecode, lol.
-The original project was ported using Claude Code, and I, in turn, updated the codebase using ChatGPT Codex.
-You can throw tomatoes at me all you want, but that’s how it is.
+Also, yes, this is double vibe-coded in the funniest possible way: the original
+Butterscotch-360 port was reportedly brought up with Claude Code, and this
+refresh was revived, debugged, and iterated with ChatGPT Codex. The intent is
+still serious: keep the source available so other people can build, inspect,
+improve, and preserve the port.
 
-The current test setup expects `data.win`, external Undertale audio files, and
-optionally `splash.png` next to the `.xex` on the console. The output binary used
-during testing is named `Butterscotch360-Refresh.xex`.
+## Current Status
 
-<!-- Badges, about the GitHub repository itself -->
-<p align="center">
-<a href="https://github.com/ButterscotchRunner/CompatibilityList"><img src="https://img.shields.io/badge/butterscotch-compatibility_list-green"></a>
-<a href="https://discord.gg/2gQR7t3WJR"><img src="https://img.shields.io/discord/1406856655920168971?color=5865F2&logo=discord&logoColor=white&label=discord"></a>
-</p>
+The port has been tested primarily with Undertale v1.08 and NXTale on a real
+Xbox 360. Vanilla Undertale is playable in the tested areas, and NXTale now has
+working console-style borders, controls, sprites, audio, and spear rotation.
 
-> [!IMPORTANT]  
-> Butterscotch is still VERY early in development and it is NOT that good yet.
+This is still experimental software. Expect missing GameMaker functions, game
+specific quirks, and Xbox 360 memory limits to matter.
 
-When you create a game in GameMaker: Studio and export it, GameMaker: Studio exports the game code as bytecode instead of native compiled code, and that bytecode is compatible with any other GameMaker: Studio runner (also known as YoYo runner), as long as they have matching GameMaker: Studio versions. This is similar to how Java applications work.
+## Files On The Console
 
-This is how projects such as [Droidtale](https://mrpowergamerbr.com/projects/droidtale) (which was also made by yours truly) can exist. We exploit that GameMaker: Studio games compile to bytecode, which means they can be ran on *any* platform that has an official runner for it!
+Place the runner and game files in the same directory on the Xbox 360. During
+testing the directory was:
 
-Ever since I created Droidtale 10+ years ago, I had that lingering thought in my mind... If GameMaker games use bytecode, what prevents us from creating our *own* runner? And if we can write our *own* runner, what prevents us from porting GameMaker: Studio games to other platforms?
-
-And that's where Butterscotch comes in! Butterscotch is an open source re-implementation of GameMaker: Studio's runner.
-
-**Butterscotch Web (WASM):** https://butterscotch.mrpowergamerbr.com/web/
-
-**Butterscotch PlayStation 2 ISO Generator:** https://butterscotch.mrpowergamerbr.com/
-
-## Game Compatibility
-
-Butterscotch's goal is to be able to have Undertale v1.08 (GameMaker: Studio 1.4.1804, WAD Version 16) fully playable. But we do want to support more GameMaker: Studio games in the future too!
-
-While our target is Undertale v1.08, that doesn't mean that other games CAN'T run in Butterscotch! Because Butterscotch is a runner and not a Undertale port/remake, you CAN run other GameMaker: Studio games with it and, as long as the game is compiled with GameMaker: Studio 1.4.1804 and they only use GML variables and functions that Butterscotch supports, it should work fine.
-
-Butterscotch supports the following WAD versions:
-
-* WAD Version 8 (GameMaker: Studio 1.0.198+)
-* WAD Version 9 (GameMaker: Studio 1.0.527+)
-* WAD Version 10 (GameMaker: Studio 1.1.609+)
-* WAD Version 11 (GameMaker: Studio 1.1.754+)
-* WAD Version 12 (GameMaker: Studio 1.1.867+)
-* WAD Version 13 (GameMaker: Studio 1.1.917+)
-* WAD Version 14 (GameMaker: Studio 1.4.1464+)
-* WAD Version 15 (GameMaker: Studio 1.4.1675+)
-* WAD Version 16 (GameMaker: Studio 1.4.1767+)
-* WAD Version 17 (GameMaker: Studio 2.2+)
-
-Other modding tools, such as UndertaleModTool, calls it "bytecode version" instead of "WAD version". We decided to go with WAD version instead because there are GameMaker: Studio versions (WAD version 6 and 7) that DO NOT use bytecode altogether, so calling it "bytecode version" is not quite correct, and because that's what the YoYo Runner calls it under the hood.
-
-Versions before GameMaker: Studio 1.0.198 (that is, pre-WAD version 8) uses raw GML code interpreted on load, so these versions would require a GML compiler to be supported in Butterscotch.
-
-However, that doesn't mean that a game that uses a compatible version WILL run! The bytecode support is still a WIP, and Butterscotch may have quirks that the original GameMaker: Studio runner may not have.
-
-Of course, there are exceptions that break game compatibility altogether:
-
-* Games compiled with YYC, because they use native code instead of bytecode. 
-* Games compiled with the new [GMRT](https://github.com/YoYoGames/GMRT-Beta/tree/main), because they use native code instead of bytecode.
-
-## Supported Platforms
-
-* Linux (GLFW, OpenGL)
-* macOS (GLFW, OpenGL)
-* Windows (GLFW, OpenGL, MinGW)
-* Web (WASM, Emscripten, WebGL2)
-* PlayStation 2 (ps2sdk, gsKit)
-* PlayStation 3 (PSL1GHT, PS3GL)
-* Haiku (GLFW)
-* ...and maybe more in the future!
-
-## Community Ports
-
-* [Xbox 360 (Butterscotch-360)](https://github.com/ceilingtilefan/Butterscotch-360) by @ceilingtilefan
-* [3DS and Wii U (Cinnamon)](https://github.com/Project-Sunshine-Native/cinnamon) by @casrielasriel, @grayforz24682, @d16.dorian, @ralcactus
-
-## Building Butterscotch
-
-```bash
-mkdir build && cd build
-cmake -DPLATFORM=desktop -DDESKTOP_BACKEND=glfw3 -DCMAKE_BUILD_TYPE=Debug ..
-make
+```text
+Hdd1:/Btrsctch
 ```
 
-If you are using CLion, set the platform in `Settings` > `Build, Execution, Deployment` > `CMake` and add `-DPLATFORM=glfw`
+Expected files:
 
-Then run Butterscotch with `./butterscotch /path/to/data.win`!
+```text
+Butterscotch360-Refresh.xex
+data.win
+*.ogg / *.wav audio files used by the game
+splash.png (optional)
+CONFIG.JSN (optional)
+```
 
-## CLI parameters
+`splash.png` is shown during startup while `data.win` is parsed. The progress
+bar and stage text are drawn over the splash.
 
-The GLFW target has a lot of nifty CLI parameters that you can use to trace and debug games running on it.
+## Controls
 
-* `--debug`: Enables debugging hotkeys.
-* `--speed`: Speed multiplier.
-* `--fast-forward-speed`: Speed multiplier when pressing TAB (toggle).
-* `--widescreen-hack`: Forces a game to run in widescreen (example: `--widescreen-hack=16:9`).
-* `--screenshot=file_%d.png`: Screenshots the runner, requires `--screenshot-at-frame`.
-* `--screenshot-at-frame=Frame`: Screenshots the runner at a specific frame. Can be used multiple times.
-* `--screenshot-surfaces=file_%d.%d.png`: Screenshots all surfaces (framebuffers), requires `--screenshot-surfaces-at-frame`.
-* `--screenshot-surfaces-at-frame=Frame`: Screenshots all surfaces (framebuffers) at a specific frame. Can be used multiple times.
-* `--headless`: Runs the runner in headless mode. When running in headless mode, the game will run at the max speed that your system can handle.
-* `--trace-variable-reads`: Traces variable reads.
-* `--trace-variable-writes`: Traces variable writes.
-* `--trace-function-calls`: Traces function calls.
-* `--trace-alarms`: Traces alarms.
-* `--trace-instance-lifecycles`: Traces instance creations and deletions.
-* `--trace-events`: Traces events.
-* `--trace-event-inherited`: Traces event inherited calls.
-* `--trace-tiles`: Traces drawn tiles.
-* `--trace-collisions`: Traces collisions between instances.
-* `--trace-opcodes`: Traces opcodes.
-* `--trace-stack`: Traces stack.
-* `--trace-frames`: Logs when a frame starts and when a frame ends, including how much time it took to process each frame.
-* `--always-log-unknown-functions`: When enabled, Butterscotch will always log unknown functions instead of logging them once per script.
-* `--always-log-stubbed-functions`: When enabled, Butterscotch will always log stubbed functions instead of logging them once per script.
-* `--trace-bytecode-after-frame`: When set, controls when `--trace-opcodes` and `--trace-stack` will start logging. Useful when debugging interpreter-heavy scripts.
-* `--exit-at-frame=Frame`: Automatically exit the runner after X frames.
-* `--seed=Seed`: Sets a fixed seed for the runner, useful for reproduceable runs.
-* `--print-rooms`: Prints all rooms to the console, along with all objects present in the room.
-* `--print-declared-functions`: Prints all declared GML scripts by the game.
-* `--print-objects`: Prints all objects definitions of the game.
-* `--disassemble`: Dissassembles a specific script.
-* `--record-inputs`: Records user inputs.
-* `--playback-inputs`: Playbacks user inputs.
-* `--os-type`: Allows changing the built-in `os_type` value. The default is Windows. Example: When running Undertale Xbox, you would need to set it to `--os-type xboxone`.
-* `--profile-gml-scripts`: Logs which GML scripts are the heaviest in terms of time and executed instructions.
-* `--profile-opcodes`: Ranks which GML opcodes were executed the most.
+Default Undertale-style keyboard mapping through the Xbox 360 controller:
 
-## Debug Features
+- D-pad / left stick: movement
+- A: confirm / Enter
+- B: cancel / Shift
+- X: Control
+- Y: X key
+- Start / Back: Escape
+- Right trigger: temporary speed-up for testing
+- LB + RB: toggle the on-screen diagnostic overlay
 
-When running Butterscotch with `--debug`, the following hotkeys are enabled:
+The diagnostic overlay shows FPS, frame timing, room name/index, instance count,
+application surface state, controller state, and memory usage.
 
-* `Page Up`: Moves forward one room
-* `Page Down`: Moves backwards one room
-* `P`: Pauses the game
-* `O`: While paused, advances the game loop by one frame
-* `F12`: Dumps the current runner state to the console
-* `F11`: Dumps the current runner state to the console (JSON format), or dumps it to a file if `--dump-frame-json-file` is set.
-* `F10`: Sets the `global.interact` flag to `0`. Useful in Undertale when you are moving through rooms and one of them starts a cutscene that doesn't let you move.
+## Optional CONFIG.JSN
 
-## Performance
+`CONFIG.JSN` can be placed next to `data.win`.
 
-Performance is pretty good on any modern computer, but when running on low end targets (like the PS2) it is *very* slow when there's a lot of instances on screen, or when a instance does a for loop.
+Example:
 
-## Then why not have a transpiler?
+```json
+{
+  "gamepadApi": false,
+  "deferDrawToAfterAllSteps": false,
+  "controllerMappings": {
+    "4096": 13,
+    "8192": 16
+  }
+}
+```
 
-The issue with a transpiler is that, if you try transpiling the game in the "naive" way, that is, emitting VM calls like it was the original bytecode, you won't get any 
-*improvement* from it, you would need to create a *good* transpiler that actually transpiles it into *good* code, and that's way harder.
+Notes:
 
-Having a transpiler also have other disadvantages:
+- `gamepadApi` defaults to `false` because some Undertale/NXTale builds read
+  both keyboard-style input and GameMaker gamepad input, which can duplicate
+  movement.
+- `os_type` is kept as Windows by default for compatibility with tested builds.
+- `controllerMappings` uses XInput button masks as keys and GameMaker key codes
+  as values.
 
-1. You lose the ability of debugging the runner at a "high level" by tracing opcodes.
-2. Compilation is SLOW, transpiling Undertale in a naive way to C and building it takes 90 seconds on a modern computer, and building it to other targets is so slow that I wasn't even able to test it.
+## Building
 
-## Screenshots
+Requirements:
 
-### Undertale (GLFW) [WAD Version 16]
+- Windows
+- Visual Studio 2010
+- Xbox 360 SDK
 
-<img width="160" height="120" alt="Image" src="https://github.com/user-attachments/assets/6651cc2e-0d6d-4354-b98d-081e84a981df" />
-<img width="160" height="120" alt="Image" src="https://github.com/user-attachments/assets/1d6edc51-2829-4f8f-b900-393f21a6655b" />
-<img width="160" height="120" alt="Image" src="https://github.com/user-attachments/assets/0d41f16c-7ee5-47de-a2e8-5831cdcd2745" />
-<img width="160" height="120" alt="Image" src="https://github.com/user-attachments/assets/45dc47fb-6d8a-44d4-8cbb-2e5791100144" />
-<img width="160" height="120" alt="Image" src="https://github.com/user-attachments/assets/7db1c869-e625-4558-9119-0f23da0f020c" />
-<img width="160" height="120" alt="Image" src="https://github.com/user-attachments/assets/71fc7616-d580-48fe-aa6d-1e6ceea41bdb" />
-<img width="160" height="120" alt="Image" src="https://github.com/user-attachments/assets/4098936e-a1b9-4971-901d-702ec390afa7" />
-<img width="160" height="120" alt="Image" src="https://github.com/user-attachments/assets/dd3dcce3-3d78-452f-9af0-27133497650c" />
-<img width="160" height="120" alt="Image" src="https://github.com/user-attachments/assets/2e356d04-5aaf-47d4-9bc3-4abba78cd18d" />
-<img width="160" height="120" alt="Image" src="https://github.com/user-attachments/assets/a9cbc57f-e9c1-4985-a6af-a98e5fce5ff3" />
-<img width="160" height="120" alt="Image" src="https://github.com/user-attachments/assets/e5c67781-0ffc-43c8-9c7d-333254eed704" />
-<img width="160" height="120" alt="Image" src="https://github.com/user-attachments/assets/93900e3c-79b5-4a05-bd6c-d68814e9e101" />
+Build command used during testing:
 
-### Undertale (PlayStation 2) [WAD Version 16]
+```bat
+call "C:\Program Files (x86)\Microsoft Visual Studio 10.0\VC\vcvarsall.bat" x86
+"C:\Windows\Microsoft.NET\Framework\v4.0.30319\MSBuild.exe" Butterscotch360.sln /t:Rebuild /p:Configuration=Release /p:Platform="Xbox 360" /m:1
+```
 
-Here's a video :3 https://youtu.be/PuzBxe0VGtY
+The built binary is produced as:
 
-Here's also another video, this time showing off the Asriel Dreemurr final battle https://youtu.be/vkQMqXr0MQE
+```text
+Release/Butterscotch.xex
+```
 
-### DELTARUNE (SURVEY_PROGRAM) (PlayStation 2) [WAD Version 16]
+For distribution/testing it is usually copied or renamed to:
 
-Here's a video :3 https://youtu.be/TLJtV2WnrmQ
+```text
+Butterscotch360-Refresh.xex
+```
 
-### DELTARUNE Chapter 2 (GLFW) [WAD Version 17]
+## What Changed From Butterscotch-360
 
-<img width="160" height="120" alt="image" src="https://github.com/user-attachments/assets/d0df9858-ad2b-4642-9f32-a542d1d942e0" />
+- Refreshed core runner code from a newer Butterscotch base.
+- Added guarded `data.win` parsing diagnostics for Xbox crashes.
+- Added Xbox 360 startup splash/progress rendering.
+- Added D3D9 support for real `application_surface` rendering.
+- Fixed byte-order and texture-page parsing issues seen on Xbox 360.
+- Added lazy texture-page loading and reduced texture memory pressure.
+- Reworked audio around streamed OGG playback to fix speed, stutter, and missing
+  music issues.
+- Fixed point sampling and 720p presentation for crisp pixel output.
+- Added NXTale-specific compatibility improvements without changing default
+  `os_type` away from Windows.
+- Added on-screen diagnostics for long hardware test sessions.
 
-### DELTARUNE Chapter 2 (PlayStation 2) [WAD Version 17]
+## Credits
 
-Here's a video :3 https://youtu.be/uuN72Hv50d4
+- Upstream runner: [ButterscotchRunner/Butterscotch](https://github.com/ButterscotchRunner/Butterscotch)
+- Original Xbox 360 port: [ceilingtilefan/Butterscotch-360](https://github.com/ceilingtilefan/Butterscotch-360)
+- Refresh/testing: flaf1x with ChatGPT Codex
 
-### DELTARUNE Chapter 3 (GLFW) [WAD Version 17]
+## License
 
-<img width="160" height="120" alt="image" src="https://github.com/user-attachments/assets/7b49d434-e66f-4ee3-bfe8-c0b4f45ceeb7" />
-<img width="160" height="120" alt="image" src="https://github.com/user-attachments/assets/afbe62ad-4706-4882-a9c9-6c239ed57c69" />
-<img width="160" height="120" alt="image" src="https://github.com/user-attachments/assets/d83c9f8c-e9b9-410e-8d3d-3663ede23fab" />
-
-### DELTARUNE Chapter 3 (PlayStation 2) [WAD Version 17]
-
-Here's a video :3 https://youtu.be/c9r79sQABYg
-
-### DELTARUNE Chapter Selector (GLFW) [WAD Version 17]
-
-<img width="160" height="120" alt="image" src="https://github.com/user-attachments/assets/b8a848df-fd1c-49b7-9602-e8020ac86d5d" />
-
-### Undertale 10th Anniversary (GLFW) [WAD Version 17]
-
-<img width="160" height="120" alt="image" src="https://github.com/user-attachments/assets/4ec0c64e-23f1-4bb1-8291-6aaf626a690f" />
-<img width="160" height="120" alt="image" src="https://github.com/user-attachments/assets/4ea7d078-784d-4861-aeb1-4ee2d1d70508" />
-<img width="160" height="120" alt="image" src="https://github.com/user-attachments/assets/45eb5be9-5e7b-4930-bb7e-2f2c49c76a49" />
-
-### NXTALE (Undertale for Xbox One) (GLFW) [WAD Version 17]
-
-<img width="160" alt="image" src="https://github.com/user-attachments/assets/7c4e2224-76e4-495e-8382-fad2dbdef207" />
-<img width="160" alt="image" src="https://github.com/user-attachments/assets/6af34191-66c6-44dd-8712-907641520073" />
-<img width="160" alt="image" src="https://github.com/user-attachments/assets/150aec4c-8cfb-4cef-9db0-f339158b0d14" />
-<img width="160" alt="image" src="https://github.com/user-attachments/assets/4e3489e8-11de-4c8c-953c-f7b776bb4eb8" />
-
-### AM2R (GLFW) [WAD Version 14]
-
-<img width="160" alt="image" src="https://github.com/user-attachments/assets/3e46dfed-487c-4d91-9cd5-c71adc7a6cb5" />
-<img width="160" alt="image" src="https://github.com/user-attachments/assets/4a4b6da1-dae4-4d0f-8611-12e7a1fc8d8c" />
-<img width="160" alt="image" src="https://github.com/user-attachments/assets/d522be68-1003-4208-bf6b-d59a004606ba" />
-
-### GameMaker: Studio Platformer Demo (GLFW) [WAD Version 10]
-
-<img width="160" alt="image" src="https://github.com/user-attachments/assets/e8cd174c-5113-416b-9e3a-c4029e1e3176" />
-<img width="160" alt="image" src="https://github.com/user-attachments/assets/3702a261-01fe-4b04-9e6c-b69336c2ce46" />
+This project follows the licensing of the upstream Butterscotch project. See
+[LICENSE](LICENSE).

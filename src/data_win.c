@@ -2287,23 +2287,49 @@ static void parseTXTR(BinaryReader* reader, DataWin* dw, size_t chunkEnd) {
     // Read metadata entries
     bool hasGeneratedMips = DataWin_isVersionAtLeast(dw, 2, 0, 0, 0);
 
-    // Detect GMS 2022.3+ (TextureBlockSize field) and 2022.9+ (Width/Height/IndexInGroup fields) by probing the distance between the first two entry pointers.
-    // Only works when there are at least 2 textures (which is almost always the case for real games).
+    // Detect TXTR entry layout by probing the distance between entry pointers.
+    // GEN8.version is often stale in patched/fan builds, and some WAD16 games store
+    // the generatedMips field despite reporting as GM:S 1.x.
     // Layouts:
-    //   pre-2022.3: scaled+generatedMips+blobOffset = 12 bytes
+    //   old GM:S 1.x: scaled+blobOffset = 8 bytes
+    //   GM:S 1.4+/GMS2 pre-2022.3: scaled+generatedMips+blobOffset = 12 bytes
     //   2022.3+: ... + textureBlockSize = 16 bytes
     //   2022.9+: ... + width + height + indexInGroup = 28 bytes
     bool has2022_3 = DataWin_isVersionAtLeast(dw, 2022, 3, 0, 0);
     bool has2022_9 = DataWin_isVersionAtLeast(dw, 2022, 9, 0, 0);
-    if (count >= 2 && hasGeneratedMips && !has2022_9 && ptrs[0] != 0 && ptrs[1] != 0) {
-        uint32_t diff = ptrs[1] - ptrs[0];
-        if (diff == 28) {
-            DataWin_bumpVersionTo(dw, 2022, 9, 0, 0);
-            has2022_3 = true;
-            has2022_9 = true;
-        } else if (diff == 16 && !has2022_3) {
+    uint32_t entryStride = 0;
+    if (count >= 2) {
+        repeat(count - 1, i) {
+            if (ptrs[i] != 0 && ptrs[i + 1] > ptrs[i]) {
+                uint32_t diff = ptrs[i + 1] - ptrs[i];
+                if (diff == 8 || diff == 12 || diff == 16 || diff == 28) {
+                    entryStride = diff;
+                    break;
+                }
+            }
+        }
+    }
+    if (entryStride == 8) {
+        hasGeneratedMips = false;
+        has2022_3 = false;
+        has2022_9 = false;
+    } else if (entryStride == 12) {
+        hasGeneratedMips = true;
+        has2022_3 = false;
+        has2022_9 = false;
+    } else if (entryStride == 16) {
+        hasGeneratedMips = true;
+        has2022_3 = true;
+        has2022_9 = false;
+        if (!DataWin_isVersionAtLeast(dw, 2022, 3, 0, 0)) {
             DataWin_bumpVersionTo(dw, 2022, 3, 0, 0);
-            has2022_3 = true;
+        }
+    } else if (entryStride == 28) {
+        hasGeneratedMips = true;
+        has2022_3 = true;
+        has2022_9 = true;
+        if (!DataWin_isVersionAtLeast(dw, 2022, 9, 0, 0)) {
+            DataWin_bumpVersionTo(dw, 2022, 9, 0, 0);
         }
     }
 
